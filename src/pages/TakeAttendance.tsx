@@ -17,7 +17,9 @@ interface StudentDescriptors {
   descriptors: Float32Array[];
 }
 
-const SIMILARITY_THRESHOLD = 0.6;
+const SIMILARITY_THRESHOLD = 0.5; // More strict threshold
+const MIN_CONFIDENCE_PERCENTAGE = 70; // Require at least 70% match
+const REQUIRED_CONSECUTIVE_MATCHES = 3; // Need 3 consecutive matches to confirm
 
 const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -25,6 +27,7 @@ const TakeAttendance = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const markedStudents = useRef<Set<string>>(new Set());
   const lastProcessTime = useRef<number>(0);
+  const pendingMatches = useRef<Map<string, { count: number; confidence: number; name: string }>>(new Map());
   
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string>("");
@@ -53,6 +56,7 @@ const TakeAttendance = () => {
     if (selectedClass) {
       fetchStudents();
       markedStudents.current.clear();
+      pendingMatches.current.clear();
       setStudentConfidenceScores(new Map());
     }
   }, [selectedClass]);
@@ -254,6 +258,9 @@ const TakeAttendance = () => {
         const detections = await detectFacesWithDescriptors(video);
         setFaceCount(detections.length);
         
+        // Clear pending matches for students not currently detected
+        const currentDetectedIds = new Set<string>();
+        
         // Process each detected face
         for (const detection of detections) {
           if (detection.descriptor && studentDescriptors.length > 0) {
@@ -263,10 +270,35 @@ const TakeAttendance = () => {
               SIMILARITY_THRESHOLD
             );
             
-            if (match && !markedStudents.current.has(match.studentId)) {
-              console.log(`✓ Match found: ${match.studentName} (${match.confidence.toFixed(1)}%)`);
-              await markAttendance(match.studentId, match.studentName, match.confidence);
+            if (match && match.confidence >= MIN_CONFIDENCE_PERCENTAGE && !markedStudents.current.has(match.studentId)) {
+              currentDetectedIds.add(match.studentId);
+              
+              // Get or initialize pending match data
+              const pending = pendingMatches.current.get(match.studentId) || { count: 0, confidence: 0, name: match.studentName };
+              
+              // Increment count and update average confidence
+              pending.count += 1;
+              pending.confidence = (pending.confidence + match.confidence) / 2;
+              pending.name = match.studentName;
+              
+              pendingMatches.current.set(match.studentId, pending);
+              
+              console.log(`Pending match: ${match.studentName} - ${pending.count}/${REQUIRED_CONSECUTIVE_MATCHES} (${match.confidence.toFixed(1)}%)`);
+              
+              // If we have enough consecutive matches, mark attendance
+              if (pending.count >= REQUIRED_CONSECUTIVE_MATCHES) {
+                console.log(`✓ Confirmed match: ${match.studentName} (${pending.confidence.toFixed(1)}%)`);
+                await markAttendance(match.studentId, match.studentName, pending.confidence);
+                pendingMatches.current.delete(match.studentId);
+              }
             }
+          }
+        }
+        
+        // Clear pending matches for students not detected in this frame
+        for (const [studentId] of pendingMatches.current) {
+          if (!currentDetectedIds.has(studentId)) {
+            pendingMatches.current.delete(studentId);
           }
         }
       } catch (err) {
@@ -309,7 +341,7 @@ const TakeAttendance = () => {
       
       toast({
         title: "✓ Attendance marked",
-        description: `${studentName} - ${confidence.toFixed(1)}% match`,
+        description: `${studentName} - ${confidence.toFixed(1)}% confidence`,
       });
     } catch (error) {
       console.error('Error marking attendance:', error);
@@ -347,8 +379,12 @@ const TakeAttendance = () => {
                   <span className="font-semibold">{faceCount}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Profiles Loaded: </span>
+                  <span className="text-muted-foreground">Profiles: </span>
                   <span className="font-semibold">{profilesLoaded}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Min Confidence: </span>
+                  <span className="font-semibold text-primary">{MIN_CONFIDENCE_PERCENTAGE}%</span>
                 </div>
               </div>
             </div>
