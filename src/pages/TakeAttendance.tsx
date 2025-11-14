@@ -8,7 +8,7 @@ import { Camera, Square, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { generateFaceEmbedding, cosineSimilarity, initFaceModel } from "@/lib/faceEmbedding";
-import { FaceDetector as MPFaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
+import { createBestDetector, IDetector } from "@/lib/detectors";
 
 interface DetectedFace {
   boundingBox: { x: number; y: number; width: number; height: number };
@@ -23,9 +23,7 @@ const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const detectionRafRef = useRef<number | null>(null);
-  const faceDetectorRef = useRef<any | null>(null);
-  const mpFaceDetectorRef = useRef<any | null>(null);
-  const visionRef = useRef<any | null>(null);
+const detectorRef = useRef<IDetector | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const markedStudents = useRef<Set<string>>(new Set());
   
@@ -36,7 +34,7 @@ const TakeAttendance = () => {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
   const [detectorSupported, setDetectorSupported] = useState<boolean>(false);
-  const [detectorType, setDetectorType] = useState<'native' | 'mediapipe' | 'unavailable'>('unavailable');
+  const [detectorType, setDetectorType] = useState<'native' | 'tfjs' | 'unavailable'>('unavailable');
   const [faceCount, setFaceCount] = useState<number>(0);
   const [profilesLoaded, setProfilesLoaded] = useState<number>(0);
   const [studentEmbeddings, setStudentEmbeddings] = useState<Array<{ 
@@ -48,27 +46,9 @@ const TakeAttendance = () => {
   
   const { toast } = useToast();
 
-  // Fetch classes and students on mount + preload MediaPipe
+  // Fetch classes on mount and cleanup
   useEffect(() => {
     fetchClasses();
-    
-    // Preload MediaPipe WASM
-    const preloadMediaPipe = async () => {
-      try {
-        if (!visionRef.current) {
-          console.log('Preloading MediaPipe WASM...');
-          visionRef.current = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-          );
-          console.log('MediaPipe WASM preloaded');
-        }
-      } catch (error) {
-        console.warn('MediaPipe preload failed:', error);
-      }
-    };
-    
-    preloadMediaPipe();
-    
     return () => {
       stopCamera();
     };
@@ -234,88 +214,31 @@ const TakeAttendance = () => {
 
   const startFaceDetection = async () => {
     try {
-      // Try native FaceDetector first
-      if ('FaceDetector' in window) {
-        console.log("Trying native FaceDetector API...");
-        const detector = new (window as any).FaceDetector();
-        faceDetectorRef.current = detector;
-        setDetectorSupported(true);
-        setDetectorType('native');
-        console.log("Native FaceDetector initialized successfully");
-        toast({
-          title: "Face detection ready",
-          description: "Using native browser face detection",
-        });
-      } else {
-        // Fallback to MediaPipe
-        console.log("Native FaceDetector not available, using MediaPipe...");
-        
-        if (!visionRef.current) {
-          console.log("Loading MediaPipe WASM files...");
-          visionRef.current = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-          );
-          console.log("MediaPipe WASM loaded successfully");
-        }
-        
-        console.log("Creating MediaPipe face detector...");
-        try {
-          // Try Google CDN first
-          mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
-            baseOptions: {
-              modelAssetPath:
-                "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
-              delegate: "GPU",
-            },
-            runningMode: "VIDEO",
-            minDetectionConfidence: 0.5,
-          });
-          console.log("MediaPipe face detector created with Google CDN");
-        } catch (cdnError) {
-          console.warn("Google CDN failed, trying local model...", cdnError);
-          try {
-            // Fallback to local model
-            mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
-              baseOptions: {
-                modelAssetPath: "/models/blaze_face_short_range.tflite",
-              },
-              runningMode: "VIDEO",
-              minDetectionConfidence: 0.5,
-            });
-            console.log("MediaPipe face detector created with local model");
-          } catch (localError) {
-            console.error("Both CDN and local model failed:", localError);
-            throw localError;
-          }
-        }
-        
-        setDetectorSupported(true);
-        setDetectorType('mediapipe');
-        toast({
-          title: "Face detection active",
-          description: "Using MediaPipe face detection",
-        });
-      }
+      const detector = await createBestDetector({ prefer: 'auto', disableMediaPipe: true });
+      if (!detector) throw new Error('No available detector');
+      detectorRef.current = detector;
+      setDetectorSupported(true);
+      setDetectorType(detector.kind === 'native' ? 'native' : 'tfjs');
+      toast({
+        title: 'Face detection ready',
+        description: `Using ${detector.kind === 'native' ? 'Native FaceDetector' : 'TFJS BlazeFace'}`,
+      });
     } catch (error) {
-      console.error("Face detection initialization failed:", error);
+      console.error('Face detection initialization failed:', error);
       setDetectorSupported(false);
       setDetectorType('unavailable');
       toast({
-        title: "Detection unavailable",
-        description: "Model load failed. Check network and reload.",
-        variant: "destructive",
+        title: 'Detection unavailable',
+        description: 'Detector init failed. Please reload.',
+        variant: 'destructive',
       });
       return;
     }
 
     // Preload face embedding model
     try {
-      console.log("Preloading face embedding model...");
       await initFaceModel();
-      console.log("Face embedding model ready");
-    } catch (embError) {
-      console.warn("Face embedding model preload failed:", embError);
-    }
+    } catch {}
 
     // Start detection loop
     const detectLoop = async () => {
@@ -324,67 +247,24 @@ const TakeAttendance = () => {
         detectionRafRef.current = requestAnimationFrame(detectLoop);
         return;
       }
-
       try {
-        // Use MediaPipe
-        if (mpFaceDetectorRef.current) {
-          const detections = mpFaceDetectorRef.current.detectForVideo(video, performance.now());
-          
-          if (detections && detections.detections) {
-            const newFaces: DetectedFace[] = detections.detections.map((detection: any) => {
-              const bbox = detection.boundingBox;
-              return {
-                boundingBox: {
-                  x: bbox.originX,
-                  y: bbox.originY,
-                  width: bbox.width,
-                  height: bbox.height,
-                },
-                confidence: detection.categories?.[0]?.score || 0,
-              };
-            });
-            
-            setDetectedFaces(newFaces);
-            setFaceCount(newFaces.length);
-            drawDetections(newFaces);
-            
-            // Process faces for recognition
-            for (const face of newFaces) {
-              await processFaceForRecognition(face, video);
-            }
-          } else {
-            setFaceCount(0);
-          }
+        const now = performance.now();
+        const dets = await detectorRef.current!.detect(video, now);
+        const newFaces: DetectedFace[] = dets.map(d => ({
+          boundingBox: { x: d.box.x, y: d.box.y, width: d.box.width, height: d.box.height },
+          confidence: d.score,
+        }));
+        setDetectedFaces(newFaces);
+        setFaceCount(newFaces.length);
+        drawDetections(newFaces);
+        for (const face of newFaces) {
+          await processFaceForRecognition(face, video);
         }
-        // Use native FaceDetector
-        else if (faceDetectorRef.current) {
-          const detections = await faceDetectorRef.current.detect(video);
-          
-          if (detections && detections.length > 0) {
-            const newFaces: DetectedFace[] = detections.map((detection: any) => ({
-              boundingBox: detection.boundingBox,
-              confidence: detection.confidence || 0,
-            }));
-            
-            setDetectedFaces(newFaces);
-            setFaceCount(newFaces.length);
-            drawDetections(newFaces);
-            
-            // Process faces for recognition
-            for (const face of newFaces) {
-              await processFaceForRecognition(face, video);
-            }
-          } else {
-            setFaceCount(0);
-          }
-        }
-      } catch (error) {
-        console.error('Detection error:', error);
+      } catch (err) {
+        console.error('Detection error:', err);
       }
-
       detectionRafRef.current = requestAnimationFrame(detectLoop);
     };
-
     detectLoop();
   };
 
@@ -398,6 +278,15 @@ const TakeAttendance = () => {
       if (!ctx) return;
       
       const bbox = face.boundingBox;
+      const vidW = video.videoWidth;
+      const vidH = video.videoHeight;
+
+      // Convert to absolute pixels if normalized
+      const isNormalized = bbox.width <= 1 && bbox.height <= 1;
+      const sx = isNormalized ? bbox.x * vidW : bbox.x;
+      const sy = isNormalized ? bbox.y * vidH : bbox.y;
+      const sw = isNormalized ? bbox.width * vidW : bbox.width;
+      const sh = isNormalized ? bbox.height * vidH : bbox.height;
       
       // Set canvas to 224x224 for model input
       canvas.width = 224;
@@ -405,10 +294,10 @@ const TakeAttendance = () => {
       
       // Calculate source dimensions with padding
       const padding = 0.2; // 20% padding around face
-      const paddedWidth = bbox.width * (1 + padding * 2);
-      const paddedHeight = bbox.height * (1 + padding * 2);
-      const paddedX = bbox.x - bbox.width * padding;
-      const paddedY = bbox.y - bbox.height * padding;
+      const paddedWidth = sw * (1 + padding * 2);
+      const paddedHeight = sh * (1 + padding * 2);
+      const paddedX = sx - sw * padding;
+      const paddedY = sy - sh * padding;
       
       // Draw the face region scaled to 224x224
       ctx.drawImage(
@@ -572,11 +461,11 @@ const TakeAttendance = () => {
                   <span className="text-muted-foreground">Detector: </span>
                   <span className={`font-semibold ${
                     detectorType === 'native' ? 'text-green-600' :
-                    detectorType === 'mediapipe' ? 'text-blue-600' :
+                    detectorType === 'tfjs' ? 'text-blue-600' :
                     'text-red-600'
                   }`}>
                     {detectorType === 'native' ? 'Native' :
-                     detectorType === 'mediapipe' ? 'MediaPipe' :
+                     detectorType === 'tfjs' ? 'TFJS BlazeFace' :
                      'Unavailable'}
                   </span>
                 </div>
