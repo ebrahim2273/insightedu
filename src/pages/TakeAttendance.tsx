@@ -441,27 +441,29 @@ const TakeAttendance = () => {
                     <div
                       key={student.id}
                       className={cn(
-                        "flex items-center justify-between p-3 rounded-lg border transition-all",
-                        isPresent ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-secondary/20"
+                        "flex items-center justify-between p-4 rounded-lg border-2 transition-all",
+                        isPresent 
+                          ? "bg-success/10 border-success/30" 
+                          : "bg-destructive/10 border-destructive/30"
                       )}
                     >
                       <div className="flex items-center gap-3">
                         {/* Status Icon */}
                         <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center",
-                          isPresent ? "bg-green-500" : "bg-red-500"
+                          "w-10 h-10 rounded-full flex items-center justify-center",
+                          isPresent ? "bg-status-present" : "bg-status-absent"
                         )}>
                           {isPresent ? (
-                            <CheckCircle2 className="h-5 w-5 text-white" />
+                            <CheckCircle2 className="h-6 w-6 text-success-foreground" />
                           ) : (
-                            <XCircle className="h-5 w-5 text-white" />
+                            <XCircle className="h-6 w-6 text-foreground" />
                           )}
                         </div>
                         <div>
-                          <p className="font-medium">{student.name}</p>
+                          <p className="font-semibold text-base text-foreground">{student.name}</p>
                           <p className="text-sm text-muted-foreground">{student.student_id}</p>
                           {isPresent && confidence !== undefined && (
-                            <p className="text-xs text-green-600 dark:text-green-400 font-semibold mt-1">
+                            <p className="text-sm text-success font-bold mt-1">
                               Match: {confidence.toFixed(1)}%
                             </p>
                           )}
@@ -469,11 +471,11 @@ const TakeAttendance = () => {
                       </div>
                       <div>
                         {isPresent ? (
-                          <Badge className="bg-green-500 hover:bg-green-600">
+                          <Badge className="bg-status-present text-success-foreground hover:bg-success font-semibold px-4 py-1">
                             Present
                           </Badge>
                         ) : (
-                          <Badge variant="secondary" className="bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300">
+                          <Badge className="bg-status-absent text-foreground hover:bg-destructive font-semibold px-4 py-1">
                             Absent
                           </Badge>
                         )}
