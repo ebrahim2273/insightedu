@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Camera, Trash2, Check } from "lucide-react";
+import { Camera, Trash2, Check, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { generateFaceEmbedding } from "@/lib/faceEmbedding";
 
 const AddStudent = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -18,6 +19,7 @@ const AddStudent = () => {
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     studentId: "",
@@ -185,49 +187,86 @@ const AddStudent = () => {
       return;
     }
 
-    // Create student
-    const { data: student, error: studentError } = await supabase
-      .from('students')
-      .insert([{
-        name: formData.name,
-        student_id: formData.studentId,
-        class_id: formData.classId || null,
-      }])
-      .select()
-      .single();
+    setIsProcessing(true);
+    
+    try {
+      toast({
+        title: "Processing",
+        description: "Generating face embeddings...",
+      });
 
-    if (studentError) {
+      // Create student
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .insert([{
+          name: formData.name,
+          student_id: formData.studentId,
+          class_id: formData.classId || null,
+        }])
+        .select()
+        .single();
+
+      if (studentError) {
+        toast({
+          title: "Error",
+          description: studentError.message,
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Generate embeddings for each captured image
+      toast({
+        title: "Processing",
+        description: `Generating embeddings from ${capturedImages.length} images...`,
+      });
+
+      const embeddings = [];
+      for (let i = 0; i < capturedImages.length; i++) {
+        const image = capturedImages[i];
+        const embedding = await generateFaceEmbedding(image);
+        embeddings.push(embedding);
+        
+        // Update progress
+        if ((i + 1) % 2 === 0) {
+          toast({
+            title: "Processing",
+            description: `Processed ${i + 1} of ${capturedImages.length} images...`,
+          });
+        }
+      }
+
+      // Store embeddings in database
+      for (let i = 0; i < capturedImages.length; i++) {
+        await supabase
+          .from('face_embeddings')
+          .insert([{
+            student_id: student.id,
+            embedding_data: { embedding: embeddings[i] },
+            image_url: capturedImages[i],
+          }]);
+      }
+
+      toast({
+        title: "Success",
+        description: "Student registered with face recognition data!",
+      });
+
+      // Reset form
+      setFormData({ name: "", studentId: "", classId: "" });
+      setCapturedImages([]);
+      stopCamera();
+    } catch (error: any) {
+      console.error('Registration error:', error);
       toast({
         title: "Error",
-        description: studentError.message,
+        description: error.message || "Failed to register student",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsProcessing(false);
     }
-
-    // In a real implementation, you would:
-    // 1. Process face embeddings using @huggingface/transformers
-    // 2. Store embeddings in face_embeddings table
-    // For now, we'll just store mock embedding data
-    for (const image of capturedImages) {
-      await supabase
-        .from('face_embeddings')
-        .insert([{
-          student_id: student.id,
-          embedding_data: { mock: "embedding_vector" }, // Replace with real embeddings
-          image_url: image, // In production, upload to storage first
-        }]);
-    }
-
-    toast({
-      title: "Success",
-      description: "Student added successfully with face data",
-    });
-
-    // Reset form
-    setFormData({ name: "", studentId: "", classId: "" });
-    setCapturedImages([]);
-    stopCamera();
   };
 
   return (
@@ -282,9 +321,22 @@ const AddStudent = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button type="submit" className="w-full gap-2 hover:scale-[1.02] transition-transform duration-200">
-                  <Check className="w-4 h-4" />
-                  Add Student
+                <Button 
+                  type="submit" 
+                  className="w-full gap-2 hover:scale-[1.02] transition-transform duration-200"
+                  disabled={isProcessing || capturedImages.length < TARGET_PHOTOS}
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Add Student
+                    </>
+                  )}
                 </Button>
               </form>
             </CardContent>
