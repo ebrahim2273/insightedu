@@ -35,45 +35,45 @@ const Layout = ({ children }: LayoutProps) => {
             </SidebarTrigger>
             
             {/* Desktop: Logo & Navigation */}
-            <div className="hidden lg:flex items-center gap-12 flex-1">
+            <div className="hidden lg:flex items-center gap-8 flex-1">
               <Link 
                 to="/dashboard" 
-                className="flex items-center gap-3 group px-4 py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200"
+                className="flex items-center gap-3 group px-4 py-2.5 rounded-lg hover:bg-secondary/50 transition-all duration-200 hover:scale-105"
               >
                 <Eye className="w-7 h-7 text-primary group-hover:scale-110 transition-transform duration-200" />
                 <span className="text-2xl font-bold neon-text">InSight</span>
               </Link>
               
-              <div className="h-10 w-px bg-border" />
+              <div className="h-12 w-px bg-border/60" />
               
-              <nav className="flex items-center gap-3">
+              <nav className="flex items-center gap-2">
                 <NavLink to="/dashboard">
-                  <LayoutDashboard className="w-4 h-4 mr-2" />
-                  Dashboard
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>Dashboard</span>
                 </NavLink>
                 <NavLink to="/attendance">
-                  <Camera className="w-4 h-4 mr-2" />
-                  Take Attendance
+                  <Camera className="w-4 h-4" />
+                  <span>Take Attendance</span>
                 </NavLink>
                 <NavLink to="/analytics">
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Analytics
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Analytics</span>
                 </NavLink>
                 <NavLink to="/classes">
-                  <Users className="w-4 h-4 mr-2" />
-                  Classes
+                  <Users className="w-4 h-4" />
+                  <span>Classes</span>
                 </NavLink>
                 <NavLink to="/history">
-                  <History className="w-4 h-4 mr-2" />
-                  History
+                  <History className="w-4 h-4" />
+                  <span>History</span>
                 </NavLink>
                 <NavLink to="/add-student">
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Add Student
+                  <UserPlus className="w-4 h-4" />
+                  <span>Add Student</span>
                 </NavLink>
                 <NavLink to="/settings">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
+                  <Settings className="w-4 h-4" />
+                  <span>Settings</span>
                 </NavLink>
               </nav>
             </div>
