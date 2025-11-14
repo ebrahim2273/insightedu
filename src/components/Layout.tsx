@@ -34,6 +34,7 @@ const Layout = ({ children }: LayoutProps) => {
     { name: "Take Attendance", path: "/attendance", icon: Camera },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },
     { name: "Class Management", path: "/classes", icon: Users },
+    { name: "Attendance History", path: "/history", icon: BarChart3 },
     { name: "Add Student", path: "/add-student", icon: UserPlus },
     { name: "Settings", path: "/settings", icon: Settings },
   ];
