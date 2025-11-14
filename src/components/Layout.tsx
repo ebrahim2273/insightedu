@@ -30,7 +30,7 @@ const Layout = ({ children }: LayoutProps) => {
   }, [location.pathname]);
   
   const navItems = [
-    { name: "Dashboard", path: "/", icon: LayoutDashboard },
+    { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
     { name: "Take Attendance", path: "/attendance", icon: Camera },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },
     { name: "Class Management", path: "/classes", icon: Users },
@@ -49,7 +49,7 @@ const Layout = ({ children }: LayoutProps) => {
         <div className="container mx-auto px-6">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2 text-xl font-bold text-primary group">
+            <Link to="/dashboard" className="flex items-center gap-2 text-xl font-bold text-primary group">
               <Eye className="w-6 h-6 animate-pulse-glow group-hover:animate-rotate-slow transition-all" />
               <span className="neon-text">InSight</span>
             </Link>
