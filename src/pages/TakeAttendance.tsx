@@ -141,7 +141,8 @@ const TakeAttendance = () => {
           acc[emb.student_id] = [];
         }
         // Convert embedding_data (array) to Float32Array
-        const embeddingArray = emb.embedding_data?.embedding || emb.embedding_data;
+        const embeddingData = emb.embedding_data as any;
+        const embeddingArray = embeddingData?.embedding || embeddingData;
         if (Array.isArray(embeddingArray)) {
           acc[emb.student_id].push(new Float32Array(embeddingArray));
         }
