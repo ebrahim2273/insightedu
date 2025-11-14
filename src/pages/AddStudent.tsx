@@ -30,7 +30,7 @@ const AddStudent = () => {
   });
   const { toast } = useToast();
 
-  const TARGET_PHOTOS = 8;
+  const TARGET_PHOTOS = 20;
 
   useEffect(() => {
     fetchClasses();

@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { generateFaceEmbedding, cosineSimilarity, initFaceModel } from "@/lib/faceEmbedding";
 import { createBestDetector, IDetector } from "@/lib/detectors";
+import { cn } from "@/lib/utils";
 
 interface DetectedFace {
   boundingBox: { x: number; y: number; width: number; height: number };
@@ -26,7 +27,7 @@ interface SmoothedBox {
 }
 
 const SIMILARITY_THRESHOLD = 0.60; // Lowered for better matching
-const BOX_SMOOTHING_FACTOR = 0.3; // Lower = smoother, higher = more responsive
+const BOX_SMOOTHING_FACTOR = 0.15; // Lower = smoother, higher = more responsive
 
 const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -342,8 +343,8 @@ const TakeAttendance = () => {
       canvas.width = 224;
       canvas.height = 224;
       
-      // Calculate source dimensions with padding
-      const padding = 0.2; // 20% padding around face
+      // Calculate source dimensions with padding - expanded to cover hair to jaw
+      const padding = 0.5; // 50% padding to cover hair to jaw
       const paddedWidth = sw * (1 + padding * 2);
       const paddedHeight = sh * (1 + padding * 2);
       const paddedX = sx - sw * padding;
@@ -683,32 +684,47 @@ const TakeAttendance = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {students.map((student) => (
-                  <div
-                    key={student.id}
-                    className="flex items-center justify-between p-3 rounded-lg border"
-                  >
-                    <div className="flex items-center gap-3">
+                {students.map((student) => {
+                  const isPresent = markedStudents.current.has(student.id);
+                  return (
+                    <div
+                      key={student.id}
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-lg border transition-all",
+                        isPresent ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : "bg-secondary/20"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Status Icon */}
+                        <div className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center",
+                          isPresent ? "bg-green-500" : "bg-red-500"
+                        )}>
+                          {isPresent ? (
+                            <CheckCircle2 className="h-5 w-5 text-white" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-white" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">{student.name}</p>
+                          <p className="text-sm text-muted-foreground">{student.student_id}</p>
+                        </div>
+                      </div>
                       <div>
-                        <p className="font-medium">{student.name}</p>
-                        <p className="text-sm text-muted-foreground">{student.student_id}</p>
+                        {isPresent ? (
+                          <Badge className="bg-green-500 hover:bg-green-600">
+                            Present
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300">
+                            Absent
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    <div>
-                      {markedStudents.current.has(student.id) ? (
-                        <Badge className="bg-green-500">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Present
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          Absent
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
