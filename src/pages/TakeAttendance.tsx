@@ -27,6 +27,7 @@ const TakeAttendance = () => {
   const [classStudents, setClassStudents] = useState<any[]>([]);
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
   const [markedAttendance, setMarkedAttendance] = useState<Set<string>>(new Set());
+  const [detectorSupported, setDetectorSupported] = useState<boolean>(typeof (window as any).FaceDetector !== 'undefined');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -147,17 +148,51 @@ const TakeAttendance = () => {
 
     if (!videoRef.current) return;
 
-    // Prefer the native FaceDetector API. If unavailable, do not mock in production to avoid false positives.
+    // Helper to keep the guide frame visible when detection is unavailable
+    const drawGuideFrame = () => {
+      if (!canvasRef.current || !videoRef.current) return;
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      const rect = video.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width * 0.35;
+      const h = canvas.height * 0.45;
+      const x = (canvas.width - w) / 2;
+      const y = (canvas.height - h) / 2;
+      ctx.strokeStyle = 'hsl(var(--accent))';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 8]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'hsl(var(--muted-foreground))';
+      ctx.font = '600 14px system-ui';
+      const msg = 'Align your face within the frame';
+      const textW = ctx.measureText(msg).width;
+      ctx.fillText(msg, (canvas.width - textW) / 2, Math.max(24, y - 12));
+    };
+
+    // Prefer the native FaceDetector API. If unavailable, draw a guide frame but do not mock detections.
     const FaceDetectorCtor = (window as any).FaceDetector;
     if (!FaceDetectorCtor) {
       console.warn("FaceDetector API not supported in this browser");
+      setDetectorSupported(false);
+      // Draw guide frame periodically while streaming
+      detectionIntervalRef.current = setInterval(() => {
+        if (!isStreaming) return;
+        drawGuideFrame();
+      }, 300);
       toast({
         title: "Face detection unavailable",
-        description: "Your browser doesn't support native face detection. You can still use manual marking.",
+        description: "Your browser doesn't support native face detection. Use manual marking or try Chrome/Edge.",
       });
       return;
     }
 
+    setDetectorSupported(true);
     try {
       faceDetectorRef.current = new FaceDetectorCtor({ fastMode: true });
     } catch (e) {
@@ -183,7 +218,6 @@ const TakeAttendance = () => {
             width: f.boundingBox?.width ?? 0,
             height: f.boundingBox?.height ?? 0,
           },
-          // No recognition implemented yet; avoid auto-marking to prevent spam
         }));
         setDetectedFaces(mapped);
         drawDetections(mapped);
@@ -237,18 +271,18 @@ const TakeAttendance = () => {
       const h = face.box.height * scaleY;
 
       // Border
-      ctx.strokeStyle = isRecognized ? '#10b981' : '#ef4444';
+      ctx.strokeStyle = isRecognized ? 'hsl(var(--success))' : 'hsl(var(--destructive))';
       ctx.lineWidth = 4;
       ctx.strokeRect(x, y, w, h);
 
       // Label background
       const label = face.studentName || 'Unknown';
       const labelH = 30;
-      ctx.fillStyle = isRecognized ? '#10b981' : '#ef4444';
+      ctx.fillStyle = isRecognized ? 'hsl(var(--success))' : 'hsl(var(--destructive))';
       ctx.fillRect(x, Math.max(0, y - labelH), Math.max(80, w), labelH);
 
       // Label text
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = isRecognized ? 'hsl(var(--success-foreground))' : 'hsl(var(--destructive-foreground))';
       ctx.font = '700 16px system-ui';
       ctx.fillText(label, x + 8, Math.max(18, y - 8));
     });
@@ -324,6 +358,11 @@ const TakeAttendance = () => {
               <CardTitle>Live Camera Feed</CardTitle>
             </CardHeader>
             <CardContent>
+              {isStreaming && !detectorSupported && (
+                <p className="text-sm text-muted-foreground mb-2">
+                  Face detection not supported in this browser. Use manual marking or try Chrome/Edge.
+                </p>
+              )}
               <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
                 <video
                   ref={videoRef}
