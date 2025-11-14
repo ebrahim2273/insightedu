@@ -10,13 +10,15 @@ let model: mobilenet.MobileNet | null = null;
 export async function initFaceModel() {
   if (!model) {
     await tf.ready();
-    if (tf.getBackend() !== 'webgl') {
+    const backend = tf.getBackend();
+    if (backend !== 'webgl') {
       await tf.setBackend('webgl');
+      await tf.ready();
     }
     model = await mobilenet.load({ version: 2, alpha: 1.0 });
     // Warmup
     const dummy = tf.zeros([224, 224, 3]);
-    tf.tidy(() => model!.infer(dummy as tf.Tensor3D, 'conv_preds'));
+    tf.tidy(() => model!.infer(dummy as tf.Tensor3D, true));
     dummy.dispose();
   }
   return model;
@@ -50,9 +52,9 @@ export async function generateFaceEmbedding(imageData: string | HTMLImageElement
   }
 
   const embedding = tf.tidy(() => {
-    const float = tensor!.toFloat();
+    const float = tf.cast(tensor!, 'float32');
     const normalized = tf.div(float, 255);
-    const act = m.infer(normalized as tf.Tensor3D, 'conv_preds') as tf.Tensor;
+    const act = m.infer(normalized as tf.Tensor3D, true) as tf.Tensor;
     const arr = act.dataSync() as Float32Array;
     // L2 normalize
     const norm = Math.sqrt(arr.reduce((s, v) => s + v * v, 0)) || 1;
