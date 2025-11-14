@@ -27,7 +27,7 @@ const Settings = () => {
 
   return (
     <Layout>
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-6 max-w-3xl animate-fade-in">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
           <p className="text-muted-foreground">Manage your account and application preferences</p>

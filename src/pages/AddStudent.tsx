@@ -17,7 +17,7 @@ const AddStudent = () => {
   const [classes, setClasses] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
+    studentId: "",
     classId: "",
   });
   const { toast } = useToast();
@@ -113,7 +113,7 @@ const AddStudent = () => {
       .from('students')
       .insert([{
         name: formData.name,
-        email: formData.email,
+        student_id: formData.studentId,
         class_id: formData.classId || null,
       }])
       .select()
@@ -148,49 +148,52 @@ const AddStudent = () => {
     });
 
     // Reset form
-    setFormData({ name: "", email: "", classId: "" });
+    setFormData({ name: "", studentId: "", classId: "" });
     setCapturedImages([]);
     stopCamera();
   };
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div>
+      <div className="space-y-6 animate-fade-in">
+        <div className="animate-fade-in-up">
           <h1 className="text-3xl font-bold text-foreground mb-2">Add New Student</h1>
           <p className="text-muted-foreground">Register a student with face recognition</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form */}
-          <Card className="border-border/50">
+          <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle>Student Information</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="transition-all duration-200 focus:scale-[1.01]"
                     required
                   />
                 </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="studentId">Student ID</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    id="studentId"
+                    value={formData.studentId}
+                    onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                    placeholder="e.g., STU-2025-001"
+                    className="transition-all duration-200 focus:scale-[1.01]"
+                    required
                   />
                 </div>
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="class">Class</Label>
                   <Select value={formData.classId} onValueChange={(value) => setFormData({ ...formData, classId: value })}>
-                    <SelectTrigger>
+                    <SelectTrigger className="transition-all duration-200 hover:border-primary/50">
                       <SelectValue placeholder="Select a class" />
                     </SelectTrigger>
                     <SelectContent>
@@ -202,7 +205,7 @@ const AddStudent = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button type="submit" className="w-full gap-2">
+                <Button type="submit" className="w-full gap-2 hover:scale-[1.02] transition-transform duration-200">
                   <Check className="w-4 h-4" />
                   Add Student
                 </Button>
@@ -211,7 +214,7 @@ const AddStudent = () => {
           </Card>
 
           {/* Camera */}
-          <Card className="border-border/50">
+          <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.1s" }}>
             <CardHeader>
               <CardTitle>Capture Face Images ({capturedImages.length}/5)</CardTitle>
             </CardHeader>
@@ -226,7 +229,7 @@ const AddStudent = () => {
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 {!isStreaming && (
-                  <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center justify-center animate-pulse-glow">
                     <Camera className="w-16 h-16 text-muted-foreground" />
                   </div>
                 )}
@@ -234,7 +237,10 @@ const AddStudent = () => {
 
               <div className="flex gap-2">
                 {!isStreaming ? (
-                  <Button onClick={startCamera} className="flex-1 gap-2">
+                  <Button 
+                    onClick={startCamera} 
+                    className="flex-1 gap-2 hover:scale-[1.02] transition-transform duration-200"
+                  >
                     <Camera className="w-4 h-4" />
                     Start Camera
                   </Button>
@@ -242,13 +248,17 @@ const AddStudent = () => {
                   <>
                     <Button 
                       onClick={captureImage} 
-                      className="flex-1 gap-2"
+                      className="flex-1 gap-2 hover:scale-[1.02] transition-transform duration-200"
                       disabled={capturedImages.length >= 5}
                     >
                       <Camera className="w-4 h-4" />
                       Capture Image
                     </Button>
-                    <Button onClick={stopCamera} variant="outline">
+                    <Button 
+                      onClick={stopCamera} 
+                      variant="outline"
+                      className="hover:scale-[1.02] transition-transform duration-200"
+                    >
                       Stop
                     </Button>
                   </>
@@ -258,16 +268,20 @@ const AddStudent = () => {
               {capturedImages.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {capturedImages.map((img, index) => (
-                    <div key={index} className="relative group">
+                    <div 
+                      key={index} 
+                      className="relative group animate-scale-in"
+                      style={{ animationDelay: `${index * 0.1}s` }}
+                    >
                       <img
                         src={img}
                         alt={`Capture ${index + 1}`}
-                        className="w-full aspect-square object-cover rounded-lg border border-border"
+                        className="w-full aspect-square object-cover rounded-lg border border-border transition-all duration-200 group-hover:scale-105"
                       />
                       <Button
                         size="sm"
                         variant="destructive"
-                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
                         onClick={() => removeImage(index)}
                       >
                         <Trash2 className="w-3 h-3" />

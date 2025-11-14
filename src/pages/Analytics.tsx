@@ -76,9 +76,9 @@ const Analytics = () => {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
         {/* Header */}
-        <div className="bg-card rounded-lg p-8 border border-border/50 relative overflow-hidden">
+        <div className="bg-card rounded-lg p-8 border border-border/50 relative overflow-hidden animate-fade-in-up hover:shadow-xl transition-shadow duration-300">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/10 opacity-50" />
           <div className="relative flex items-center gap-3">
             <BarChart className="w-8 h-8 text-primary" />
@@ -90,7 +90,7 @@ const Analytics = () => {
         </div>
 
         {/* Filters */}
-        <Card className="border-border/50">
+        <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300">
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -131,32 +131,40 @@ const Analytics = () => {
                 </Select>
               </div>
             </div>
-            <Button className="mt-4">Update</Button>
+            <Button className="mt-4 hover:scale-105 transition-transform duration-200">Update</Button>
           </CardContent>
         </Card>
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard
-            title="Total Students"
-            value={stats.totalStudents}
-            icon={Users}
-          />
-          <StatCard
-            title="Present Today"
-            value={stats.presentToday}
-            icon={CheckCircle}
-          />
-          <StatCard
-            title="Absent Today"
-            value={stats.absentToday}
-            icon={XCircle}
-          />
-          <StatCard
-            title="Attendance Rate"
-            value={`${stats.attendanceRate}%`}
-            icon={TrendingUp}
-          />
+          <div className="animate-scale-in" style={{ animationDelay: "0.1s" }}>
+            <StatCard
+              title="Total Students"
+              value={stats.totalStudents}
+              icon={Users}
+            />
+          </div>
+          <div className="animate-scale-in" style={{ animationDelay: "0.2s" }}>
+            <StatCard
+              title="Present Today"
+              value={stats.presentToday}
+              icon={CheckCircle}
+            />
+          </div>
+          <div className="animate-scale-in" style={{ animationDelay: "0.3s" }}>
+            <StatCard
+              title="Absent Today"
+              value={stats.absentToday}
+              icon={XCircle}
+            />
+          </div>
+          <div className="animate-scale-in" style={{ animationDelay: "0.4s" }}>
+            <StatCard
+              title="Attendance Rate"
+              value={`${stats.attendanceRate}%`}
+              icon={TrendingUp}
+            />
+          </div>
         </div>
 
         {/* Charts */}
