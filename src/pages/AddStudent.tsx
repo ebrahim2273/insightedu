@@ -15,6 +15,8 @@ const AddStudent = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const frameAnimationRef = useRef<number | null>(null);
+  const completionShownRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -58,7 +60,7 @@ const AddStudent = () => {
   };
 
   const drawGuideFrame = () => {
-    if (!overlayCanvasRef.current || !videoRef.current) return;
+    if (!overlayCanvasRef.current || !videoRef.current || !isStreaming) return;
     const canvas = overlayCanvasRef.current;
     const video = videoRef.current;
     const rect = video.getBoundingClientRect();
@@ -68,22 +70,41 @@ const AddStudent = () => {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    const w = canvas.width * 0.4;
-    const h = canvas.height * 0.5;
+    const w = canvas.width * 0.35;
+    const h = canvas.height * 0.45;
     const x = (canvas.width - w) / 2;
     const y = (canvas.height - h) / 2;
     
-    ctx.strokeStyle = 'hsl(var(--primary))';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([8, 8]);
+    // Softer, animated guide
+    const progress = capturedImages.length / TARGET_PHOTOS;
+    const hue = progress * 120; // Green gradient as progress increases
+    
+    ctx.strokeStyle = `hsla(${hue}, 70%, 50%, 0.8)`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 5]);
     ctx.strokeRect(x, y, w, h);
     ctx.setLineDash([]);
     
-    ctx.fillStyle = 'hsl(var(--primary-foreground))';
-    ctx.font = '600 14px system-ui';
-    const msg = isCapturing ? `Capturing... ${capturedImages.length}/${TARGET_PHOTOS}` : 'Position your face in the frame';
+    // Subtle background
+    ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.05)`;
+    ctx.fillRect(x, y, w, h);
+    
+    // Text with better visibility
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.lineWidth = 3;
+    ctx.font = '600 16px system-ui';
+    const msg = isCapturing ? `${capturedImages.length}/${TARGET_PHOTOS} photos` : 'Position face here';
     const textW = ctx.measureText(msg).width;
-    ctx.fillText(msg, (canvas.width - textW) / 2, Math.max(24, y - 12));
+    const textX = (canvas.width - textW) / 2;
+    const textY = y - 16;
+    ctx.strokeText(msg, textX, textY);
+    ctx.fillText(msg, textX, textY);
+    
+    // Request next frame
+    if (isStreaming) {
+      frameAnimationRef.current = requestAnimationFrame(drawGuideFrame);
+    }
   };
 
   const startCamera = async () => {
@@ -119,6 +140,10 @@ const AddStudent = () => {
       clearInterval(captureIntervalRef.current);
       captureIntervalRef.current = null;
     }
+    if (frameAnimationRef.current) {
+      cancelAnimationFrame(frameAnimationRef.current);
+      frameAnimationRef.current = null;
+    }
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(track => track.stop());
@@ -126,41 +151,46 @@ const AddStudent = () => {
     }
     setIsStreaming(false);
     setIsCapturing(false);
+    completionShownRef.current = false;
   };
 
   const startAutoCapture = () => {
     setIsCapturing(true);
     setCapturedImages([]);
+    completionShownRef.current = false;
+    
+    // Start smooth guide frame animation
+    if (frameAnimationRef.current) {
+      cancelAnimationFrame(frameAnimationRef.current);
+    }
+    frameAnimationRef.current = requestAnimationFrame(drawGuideFrame);
     
     let captureCount = 0;
     captureIntervalRef.current = setInterval(() => {
       if (captureCount >= TARGET_PHOTOS) {
+        // Clear interval FIRST to prevent multiple triggers
         if (captureIntervalRef.current) {
           clearInterval(captureIntervalRef.current);
           captureIntervalRef.current = null;
         }
         setIsCapturing(false);
+        
+        // Show notification only once
+        if (!completionShownRef.current) {
+          completionShownRef.current = true;
+          toast({
+            title: "Capture Complete",
+            description: `${TARGET_PHOTOS} photos captured successfully! You can now register the student.`,
+          });
+        }
+        
         stopCamera();
-        toast({
-          title: "Capture Complete",
-          description: `${TARGET_PHOTOS} photos captured successfully! You can now register the student.`,
-        });
         return;
       }
 
       captureImage();
       captureCount++;
-      drawGuideFrame();
-    }, 600);
-
-    // Draw initial frame
-    const frameInterval = setInterval(() => {
-      if (!isStreaming) {
-        clearInterval(frameInterval);
-        return;
-      }
-      drawGuideFrame();
-    }, 100);
+    }, 700);
   };
 
   const captureImage = () => {
