@@ -8,7 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* InSight Dark Theme - Based on reference images */
+    /* InSight Dark Theme - Enhanced Futuristic */
     --background: 220 26% 8%;
     --foreground: 210 20% 98%;
 
@@ -46,23 +46,30 @@ All colors MUST be HSL.
     --gradient-from: 174 72% 56%;
     --gradient-to: 217 91% 60%;
     
-    /* Card gradient border */
-    --card-gradient: linear-gradient(135deg, hsl(174 72% 56% / 0.5), hsl(217 91% 60% / 0.5));
+    /* Enhanced glow colors */
+    --glow-primary: 174 72% 56%;
+    --glow-secondary: 217 91% 60%;
+    --glow-success: 142 72% 52%;
+    
+    /* Grid animation */
+    --grid-color: 174 72% 56%;
     
     /* Status colors */
     --status-present: 142 72% 52%;
     --status-absent: 0 72% 51%;
     --status-late: 38 92% 50%;
     
-    /* Shadows */
+    /* Shadows & Glows */
     --shadow-glow: 0 0 20px hsl(174 72% 56% / 0.3);
+    --shadow-intense: 0 0 40px hsl(174 72% 56% / 0.6);
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 
   .dark {
-    /* Dark mode uses same theme - this is the default */
+    /* Dark mode uses same enhanced theme */
     --background: 220 26% 8%;
     --foreground: 210 20% 98%;
 
@@ -103,5 +110,186 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Animated Grid Background */
+@layer components {
+  .animated-grid-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.15;
+    background-size: 50px 50px;
+    background-image: 
+      linear-gradient(to right, hsl(var(--grid-color) / 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--grid-color) / 0.1) 1px, transparent 1px);
+    animation: grid-flow 20s linear infinite;
+  }
+
+  .animated-grid-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, hsl(var(--glow-primary) / 0.1) 0%, transparent 50%);
+    animation: pulse-glow 4s ease-in-out infinite;
+  }
+
+  @keyframes grid-flow {
+    0% {
+      transform: translate(0, 0);
+    }
+    100% {
+      transform: translate(50px, 50px);
+    }
+  }
+}
+
+/* Light Saber Button Effect */
+@layer components {
+  .btn-lightsaber {
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition-smooth);
+  }
+
+  .btn-lightsaber::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--glow-primary) / 0.6),
+      transparent
+    );
+    transition: left 0.5s ease;
+  }
+
+  .btn-lightsaber:hover::before {
+    left: 100%;
+  }
+
+  .btn-lightsaber:hover {
+    box-shadow: 
+      0 0 20px hsl(var(--glow-primary) / 0.4),
+      0 0 40px hsl(var(--glow-primary) / 0.2),
+      inset 0 0 20px hsl(var(--glow-primary) / 0.1);
+    transform: translateY(-2px);
+  }
+}
+
+/* Glow Cards */
+@layer components {
+  .card-glow {
+    position: relative;
+    transition: var(--transition-smooth);
+  }
+
+  .card-glow::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(
+      45deg,
+      hsl(var(--glow-primary) / 0.3),
+      hsl(var(--glow-secondary) / 0.3),
+      hsl(var(--glow-primary) / 0.3)
+    );
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: -1;
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
+
+  .card-glow:hover::before {
+    opacity: 1;
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+}
+
+/* Wavy Line Separator */
+@layer components {
+  .wavy-line {
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--primary)),
+      transparent
+    );
+    mask-image: repeating-linear-gradient(
+      90deg,
+      black 0px,
+      black 10px,
+      transparent 10px,
+      transparent 15px
+    );
+    animation: wave-flow 2s linear infinite;
+  }
+
+  @keyframes wave-flow {
+    0% {
+      mask-position: 0 0;
+    }
+    100% {
+      mask-position: 30px 0;
+    }
+  }
+}
+
+/* Floating Animation */
+@layer components {
+  .float-animation {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+}
+
+/* Neon Text Glow */
+@layer components {
+  .neon-text {
+    text-shadow: 
+      0 0 10px hsl(var(--primary) / 0.8),
+      0 0 20px hsl(var(--primary) / 0.6),
+      0 0 30px hsl(var(--primary) / 0.4),
+      0 0 40px hsl(var(--primary) / 0.2);
+    animation: neon-flicker 2s ease-in-out infinite alternate;
+  }
+
+  @keyframes neon-flicker {
+    0%, 100% {
+      text-shadow: 
+        0 0 10px hsl(var(--primary) / 0.8),
+        0 0 20px hsl(var(--primary) / 0.6),
+        0 0 30px hsl(var(--primary) / 0.4);
+    }
+    50% {
+      text-shadow: 
+        0 0 5px hsl(var(--primary) / 0.6),
+        0 0 10px hsl(var(--primary) / 0.4),
+        0 0 15px hsl(var(--primary) / 0.2);
+    }
   }
 }

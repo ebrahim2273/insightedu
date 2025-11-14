@@ -59,107 +59,81 @@ const Dashboard = () => {
 
   return (
     <Layout>
-      <div className="space-y-8 animate-fade-in">
+      <div className="space-y-8">
         {/* Welcome Section */}
-        <div className="bg-card rounded-lg p-8 border border-border/50 relative overflow-hidden animate-fade-in-up hover:shadow-xl transition-shadow duration-300">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/10 opacity-50" />
-          <div className="relative">
-            <h1 className="text-3xl font-bold text-foreground mb-2">Welcome to Your Dashboard</h1>
-            <p className="text-muted-foreground">Manage your classes and track attendance efficiently</p>
+        <div className="card-glow bg-card/80 backdrop-blur-sm rounded-lg p-8 border-2 border-primary/20 relative overflow-hidden animate-fade-in-up hover:scale-[1.01] transition-transform duration-300">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-accent/10 to-transparent opacity-60" />
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl animate-pulse-glow" />
+          <div className="relative z-10">
+            <h1 className="text-4xl font-bold neon-text mb-3 float-animation">Welcome to InSight Dashboard</h1>
+            <p className="text-muted-foreground text-lg">AI-Powered Face Recognition Attendance System</p>
           </div>
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="animate-scale-in" style={{ animationDelay: "0.1s" }}>
-            <StatCard
-              title="Total Students"
-              value={stats.totalStudents}
-              icon={Users}
-            />
+          <div className="animate-bounce-in" style={{ animationDelay: "0.1s" }}>
+            <StatCard title="Total Students" value={stats.totalStudents} icon={Users} />
           </div>
-          <div className="animate-scale-in" style={{ animationDelay: "0.2s" }}>
-            <StatCard
-              title="Active Classes"
-              value={stats.activeClasses}
-              icon={BookOpen}
-            />
+          <div className="animate-bounce-in" style={{ animationDelay: "0.2s" }}>
+            <StatCard title="Active Classes" value={stats.activeClasses} icon={BookOpen} />
           </div>
-          <div className="animate-scale-in" style={{ animationDelay: "0.3s" }}>
-            <StatCard
-              title="Today's Attendance"
-              value={stats.todayAttendance}
-              icon={UserCheck}
-            />
+          <div className="animate-bounce-in" style={{ animationDelay: "0.3s" }}>
+            <StatCard title="Today's Records" value={stats.todayAttendance} icon={UserCheck} />
           </div>
-          <div className="animate-scale-in" style={{ animationDelay: "0.4s" }}>
-            <StatCard
-              title="Attendance Rate"
-              value={`${stats.attendanceRate}%`}
-              icon={TrendingUp}
-            />
+          <div className="animate-bounce-in" style={{ animationDelay: "0.4s" }}>
+            <StatCard title="Attendance Rate" value={`${stats.attendanceRate}%`} icon={TrendingUp} />
           </div>
         </div>
 
-        {/* Bottom Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Live Camera Feed */}
-          <Card className="lg:col-span-2 border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.5s" }}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Camera className="w-5 h-5" />
-                Live Camera Feed
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border border-border">
-                <div className="text-center">
-                  <Camera className="w-12 h-12 text-muted-foreground mx-auto mb-2 animate-pulse-glow" />
-                  <p className="text-muted-foreground">Camera feed will appear here during attendance sessions</p>
+        {/* Wavy Separator */}
+        <div className="wavy-line my-8" />
+
+        {/* Status Overview */}
+        <Card className="card-glow border-2 border-primary/20 overflow-hidden animate-slide-up bg-card/50 backdrop-blur-sm">
+          <CardHeader className="bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 bg-[length:200%_100%] animate-shimmer">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Camera className="w-5 h-5 animate-pulse-glow" />
+              <span className="neon-text">Today's Attendance Status</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Present Card */}
+              <div className="bg-success/10 rounded-lg p-6 border-2 border-success/30 hover:border-success/50 transition-all hover:scale-105 card-glow animate-fade-in" style={{ animationDelay: "0.5s" }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-success/80 font-medium uppercase tracking-wide">Present</p>
+                    <p className="text-4xl font-bold text-success neon-text mt-2">{stats.presentToday}</p>
+                  </div>
+                  <UserCheck className="w-12 h-12 text-success opacity-50 float-animation" />
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Today's Summary */}
-          <div className="space-y-4">
-            <Card className="border-success/50 animate-scale-in hover:scale-105 transition-transform duration-300" style={{ animationDelay: "0.6s" }}>
-              <CardContent className="p-6">
-                <div className="text-center">
-                  <p className="text-4xl font-bold text-success">{stats.presentToday}</p>
-                  <p className="text-sm text-muted-foreground mt-2 uppercase tracking-wide">Present Today</p>
+              {/* Absent Card */}
+              <div className="bg-destructive/10 rounded-lg p-6 border-2 border-destructive/30 hover:border-destructive/50 transition-all hover:scale-105 card-glow animate-fade-in" style={{ animationDelay: "0.6s" }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-destructive/80 font-medium uppercase tracking-wide">Absent</p>
+                    <p className="text-4xl font-bold text-destructive neon-text mt-2">{stats.absentToday}</p>
+                  </div>
+                  <Users className="w-12 h-12 text-destructive opacity-50 float-animation" style={{ animationDelay: "0.5s" }} />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card className="border-destructive/50 animate-scale-in hover:scale-105 transition-transform duration-300" style={{ animationDelay: "0.7s" }}>
-              <CardContent className="p-6">
-                <div className="text-center">
-                  <p className="text-4xl font-bold text-destructive">{stats.absentToday}</p>
-                  <p className="text-sm text-muted-foreground mt-2 uppercase tracking-wide">Absent Today</p>
+              {/* Late Card */}
+              <div className="bg-yellow-500/10 rounded-lg p-6 border-2 border-yellow-500/30 hover:border-yellow-500/50 transition-all hover:scale-105 card-glow animate-fade-in" style={{ animationDelay: "0.7s" }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-yellow-500/80 font-medium uppercase tracking-wide">Late</p>
+                    <p className="text-4xl font-bold text-yellow-500 neon-text mt-2">{stats.lateToday}</p>
+                  </div>
+                  <TrendingUp className="w-12 h-12 text-yellow-500 opacity-50 float-animation" style={{ animationDelay: "1s" }} />
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-status-late/50 animate-scale-in hover:scale-105 transition-transform duration-300" style={{ animationDelay: "0.8s" }}>
-              <CardContent className="p-6">
-                <div className="text-center">
-                  <p className="text-4xl font-bold text-[hsl(var(--status-late))]">{stats.lateToday}</p>
-                  <p className="text-sm text-muted-foreground mt-2 uppercase tracking-wide">Late Today</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Pro Tip */}
-        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-          <p className="text-sm text-foreground">
-            <span className="font-semibold">Pro tip:</span> Press <kbd className="px-2 py-1 bg-muted rounded text-xs">G</kbd> for Classes, 
-            <kbd className="px-2 py-1 bg-muted rounded text-xs ml-2">A</kbd> for Analytics, 
-            <kbd className="px-2 py-1 bg-muted rounded text-xs ml-2">R</kbd> to Take Attendance
-          </p>
-        </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );
