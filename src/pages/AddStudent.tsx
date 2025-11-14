@@ -12,15 +12,20 @@ import { useToast } from "@/hooks/use-toast";
 const AddStudent = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
+  const [isCapturing, setIsCapturing] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     studentId: "",
     classId: "",
   });
   const { toast } = useToast();
+
+  const TARGET_PHOTOS = 8;
 
   useEffect(() => {
     fetchClasses();
@@ -37,6 +42,35 @@ const AddStudent = () => {
     setClasses(data || []);
   };
 
+  const drawGuideFrame = () => {
+    if (!overlayCanvasRef.current || !videoRef.current) return;
+    const canvas = overlayCanvasRef.current;
+    const video = videoRef.current;
+    const rect = video.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const w = canvas.width * 0.4;
+    const h = canvas.height * 0.5;
+    const x = (canvas.width - w) / 2;
+    const y = (canvas.height - h) / 2;
+    
+    ctx.strokeStyle = 'hsl(var(--primary))';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 8]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+    
+    ctx.fillStyle = 'hsl(var(--primary-foreground))';
+    ctx.font = '600 14px system-ui';
+    const msg = isCapturing ? `Capturing... ${capturedImages.length}/${TARGET_PHOTOS}` : 'Position your face in the frame';
+    const textW = ctx.measureText(msg).width;
+    ctx.fillText(msg, (canvas.width - textW) / 2, Math.max(24, y - 12));
+  };
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -50,6 +84,11 @@ const AddStudent = () => {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setIsStreaming(true);
+        
+        // Wait for video to be ready
+        videoRef.current.onloadedmetadata = () => {
+          startAutoCapture();
+        };
       }
     } catch (error) {
       toast({
@@ -61,12 +100,52 @@ const AddStudent = () => {
   };
 
   const stopCamera = () => {
+    if (captureIntervalRef.current) {
+      clearInterval(captureIntervalRef.current);
+      captureIntervalRef.current = null;
+    }
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
     setIsStreaming(false);
+    setIsCapturing(false);
+  };
+
+  const startAutoCapture = () => {
+    setIsCapturing(true);
+    setCapturedImages([]);
+    
+    let captureCount = 0;
+    captureIntervalRef.current = setInterval(() => {
+      if (captureCount >= TARGET_PHOTOS) {
+        if (captureIntervalRef.current) {
+          clearInterval(captureIntervalRef.current);
+          captureIntervalRef.current = null;
+        }
+        setIsCapturing(false);
+        stopCamera();
+        toast({
+          title: "Capture Complete",
+          description: `${TARGET_PHOTOS} photos captured successfully! You can now register the student.`,
+        });
+        return;
+      }
+
+      captureImage();
+      captureCount++;
+      drawGuideFrame();
+    }, 600);
+
+    // Draw initial frame
+    const frameInterval = setInterval(() => {
+      if (!isStreaming) {
+        clearInterval(frameInterval);
+        return;
+      }
+      drawGuideFrame();
+    }, 100);
   };
 
   const captureImage = () => {
@@ -84,11 +163,9 @@ const AddStudent = () => {
     ctx.drawImage(video, 0, 0);
     const imageData = canvas.toDataURL('image/jpeg', 0.8);
     
-    setCapturedImages(prev => [...prev, imageData]);
-    
-    toast({
-      title: "Image Captured",
-      description: `${capturedImages.length + 1} of 5 images captured`,
+    setCapturedImages(prev => {
+      const newImages = [...prev, imageData];
+      return newImages;
     });
   };
 
@@ -99,10 +176,10 @@ const AddStudent = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (capturedImages.length < 3) {
+    if (capturedImages.length < TARGET_PHOTOS) {
       toast({
         title: "Error",
-        description: "Please capture at least 3 images",
+        description: `Please capture ${TARGET_PHOTOS} images using the camera`,
         variant: "destructive",
       });
       return;
@@ -216,7 +293,7 @@ const AddStudent = () => {
           {/* Camera */}
           <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.1s" }}>
             <CardHeader>
-              <CardTitle>Capture Face Images ({capturedImages.length}/5)</CardTitle>
+              <CardTitle>Capture Face Images ({capturedImages.length}/{TARGET_PHOTOS})</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
@@ -226,6 +303,10 @@ const AddStudent = () => {
                   playsInline
                   muted
                   className="w-full h-full object-cover"
+                />
+                <canvas 
+                  ref={overlayCanvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 {!isStreaming && (
@@ -242,26 +323,17 @@ const AddStudent = () => {
                     className="flex-1 gap-2 hover:scale-[1.02] transition-transform duration-200"
                   >
                     <Camera className="w-4 h-4" />
-                    Start Camera
+                    Start Auto-Capture
                   </Button>
                 ) : (
-                  <>
-                    <Button 
-                      onClick={captureImage} 
-                      className="flex-1 gap-2 hover:scale-[1.02] transition-transform duration-200"
-                      disabled={capturedImages.length >= 5}
-                    >
-                      <Camera className="w-4 h-4" />
-                      Capture Image
-                    </Button>
-                    <Button 
-                      onClick={stopCamera} 
-                      variant="outline"
-                      className="hover:scale-[1.02] transition-transform duration-200"
-                    >
-                      Stop
-                    </Button>
-                  </>
+                  <Button 
+                    onClick={stopCamera} 
+                    variant="outline"
+                    className="w-full hover:scale-[1.02] transition-transform duration-200"
+                    disabled={isCapturing}
+                  >
+                    {isCapturing ? `Capturing... ${capturedImages.length}/${TARGET_PHOTOS}` : 'Stop Camera'}
+                  </Button>
                 )}
               </div>
 
