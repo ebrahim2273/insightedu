@@ -28,20 +28,25 @@ const Layout = ({ children }: LayoutProps) => {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col relative z-10">
           {/* Top Bar */}
-          <header className="h-16 border-b border-border/50 bg-card/80 backdrop-blur-xl flex items-center justify-between px-4 md:px-6">
+          <header className="h-20 border-b-2 border-border bg-card/95 backdrop-blur-xl flex items-center justify-between px-6 md:px-8 shadow-sm">
             {/* Mobile: Sidebar Trigger */}
-            <SidebarTrigger className="lg:hidden">
+            <SidebarTrigger className="lg:hidden p-2 hover:bg-secondary rounded-lg transition-all duration-200 hover:scale-105">
               <Menu className="w-6 h-6" />
             </SidebarTrigger>
             
             {/* Desktop: Logo & Navigation */}
-            <div className="hidden lg:flex items-center gap-8 flex-1">
-              <Link to="/dashboard" className="flex items-center gap-2 group">
-                <Eye className="w-6 h-6 text-primary group-hover:scale-110 transition-transform" />
-                <span className="text-xl font-bold neon-text">InSight</span>
+            <div className="hidden lg:flex items-center gap-12 flex-1">
+              <Link 
+                to="/dashboard" 
+                className="flex items-center gap-3 group px-4 py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200"
+              >
+                <Eye className="w-7 h-7 text-primary group-hover:scale-110 transition-transform duration-200" />
+                <span className="text-2xl font-bold neon-text">InSight</span>
               </Link>
               
-              <nav className="flex items-center gap-1">
+              <div className="h-10 w-px bg-border" />
+              
+              <nav className="flex items-center gap-3">
                 <NavLink to="/dashboard">
                   <LayoutDashboard className="w-4 h-4 mr-2" />
                   Dashboard
@@ -73,11 +78,13 @@ const Layout = ({ children }: LayoutProps) => {
               </nav>
             </div>
 
+            <div className="h-10 w-px bg-border hidden lg:block mx-4" />
+
             <Button
               onClick={signOut}
               variant="ghost"
               size="sm"
-              className="ml-auto text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-200 hover:scale-105"
             >
               <LogOut className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Logout</span>
