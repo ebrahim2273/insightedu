@@ -12,12 +12,27 @@ let featureExtractor: any = null;
 export async function initFaceModel() {
   if (!featureExtractor) {
     console.log('Loading face feature extraction model...');
-    featureExtractor = await pipeline(
-      'image-feature-extraction',
-      'Xenova/mobilenet_v2_1.0_224',
-      { device: 'webgpu' }
-    );
-    console.log('Face model loaded successfully');
+    
+    // Try devices in order: webgpu -> wasm -> cpu
+    const devices = ['webgpu', 'wasm', 'cpu'] as const;
+    
+    for (const device of devices) {
+      try {
+        console.log(`Attempting to load model with device: ${device}`);
+        featureExtractor = await pipeline(
+          'image-feature-extraction',
+          'Xenova/mobilenet_v2_1.0_224',
+          { device }
+        );
+        console.log(`Face model loaded successfully with device: ${device}`);
+        break;
+      } catch (error) {
+        console.warn(`Failed to load with ${device}:`, error);
+        if (device === 'cpu') {
+          throw new Error('Failed to load face model with all devices');
+        }
+      }
+    }
   }
   return featureExtractor;
 }
