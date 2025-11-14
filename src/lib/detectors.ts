@@ -103,6 +103,7 @@ export type DetectorInitOptions = {
   prefer?: DetectorKind | "auto";
   wasmBaseUrl?: string; // e.g. "/mediapipe/wasm"
   mpModelBytes?: Uint8Array; // blaze_face_short_range.tflite bytes
+  disableMediaPipe?: boolean;
 };
 
 export async function createBestDetector(opts: DetectorInitOptions = {}): Promise<IDetector | null> {
@@ -113,15 +114,13 @@ export async function createBestDetector(opts: DetectorInitOptions = {}): Promis
     try { return new NativeDetector(); } catch {}
   }
 
-  // Try MediaPipe
-  if (prefer === "auto" || prefer === "mediapipe") {
+// Try MediaPipe
+  if ((prefer === "auto" || prefer === "mediapipe") && !opts.disableMediaPipe) {
     try {
       const fileset = await FilesetResolver.forVisionTasks(opts.wasmBaseUrl || "/mediapipe/wasm");
       const detector = await MPFaceDetector.createFromOptions(fileset, {
         baseOptions: {
-          // Prefer local bytes to avoid CORS/URL issues
           ...(opts.mpModelBytes ? { modelAssetBuffer: opts.mpModelBytes } : {}),
-          // delegate CPU for stability (GPU may need cross-origin isolation)
           delegate: "CPU",
         },
         runningMode: "VIDEO",
