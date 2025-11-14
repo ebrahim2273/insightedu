@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     
     if (!error) {
-      navigate('/');
+      navigate('/dashboard');
     }
     
     return { error };
@@ -93,7 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    navigate('/auth');
+    navigate('/');
   };
 
   return (
