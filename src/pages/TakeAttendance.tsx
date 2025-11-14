@@ -22,6 +22,7 @@ const TakeAttendance = () => {
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [classes, setClasses] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [classStudents, setClassStudents] = useState<any[]>([]);
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
   const [markedAttendance, setMarkedAttendance] = useState<Set<string>>(new Set());
   const { toast } = useToast();
@@ -38,6 +39,13 @@ const TakeAttendance = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (selectedClass) {
+      fetchClassStudents();
+      setMarkedAttendance(new Set());
+    }
+  }, [selectedClass]);
+
   const fetchClasses = async () => {
     const { data } = await supabase
       .from('classes')
@@ -52,6 +60,17 @@ const TakeAttendance = () => {
       .select('*, face_embeddings(*)')
       .eq('status', 'active');
     setStudents(data || []);
+  };
+
+  const fetchClassStudents = async () => {
+    if (!selectedClass) return;
+    const { data } = await supabase
+      .from('students')
+      .select('*')
+      .eq('class_id', selectedClass)
+      .eq('status', 'active')
+      .order('name');
+    setClassStudents(data || []);
   };
 
   const startCamera = async () => {
@@ -135,20 +154,36 @@ const TakeAttendance = () => {
       const mockFaces: DetectedFace[] = [];
       
       // Randomly detect some students (simulate real detection)
-      const numFaces = Math.floor(Math.random() * 2); // 0 or 1 face
-      students.slice(0, numFaces).forEach((student, i) => {
+      const numRecognized = Math.floor(Math.random() * 2); // 0 or 1 recognized face
+      const numUnknown = Math.random() > 0.7 ? 1 : 0; // Occasionally show unknown face
+      
+      // Add recognized students
+      students.slice(0, numRecognized).forEach((student, i) => {
         mockFaces.push({
           box: {
-            x: 100 + i * 200,
-            y: 150,
-            width: 150,
-            height: 180
+            x: 200 + i * 250,
+            y: 100,
+            width: 200,
+            height: 240
           },
           studentId: student.id,
           studentName: student.name,
           confidence: 0.85 + Math.random() * 0.15
         });
       });
+
+      // Add unknown faces
+      for (let i = 0; i < numUnknown; i++) {
+        mockFaces.push({
+          box: {
+            x: 100 + (numRecognized + i) * 250,
+            y: 100,
+            width: 200,
+            height: 240
+          },
+          confidence: 0.5 + Math.random() * 0.3
+        });
+      }
 
       setDetectedFaces(mockFaces);
       drawDetections(mockFaces);
@@ -168,35 +203,43 @@ const TakeAttendance = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Match canvas size to video display size
+    const rect = video.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    // Calculate scale factors
+    const scaleX = rect.width / video.videoWidth;
+    const scaleY = rect.height / video.videoHeight;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     faces.forEach(face => {
       const isRecognized = !!face.studentId;
       
+      // Scale box coordinates to canvas size
+      const x = face.box.x * scaleX;
+      const y = face.box.y * scaleY;
+      const width = face.box.width * scaleX;
+      const height = face.box.height * scaleY;
+      
       // Draw rectangle
       ctx.strokeStyle = isRecognized ? '#10b981' : '#ef4444';
       ctx.lineWidth = 3;
-      ctx.strokeRect(face.box.x, face.box.y, face.box.width, face.box.height);
+      ctx.strokeRect(x, y, width, height);
 
-      // Draw label
-      if (face.studentName) {
-        ctx.fillStyle = '#10b981';
-        ctx.fillRect(face.box.x, face.box.y - 30, face.box.width, 30);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '16px Arial';
-        ctx.fillText(face.studentName, face.box.x + 5, face.box.y - 8);
-      } else {
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(face.box.x, face.box.y - 30, face.box.width, 30);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '16px Arial';
-        ctx.fillText('Unknown', face.box.x + 5, face.box.y - 8);
-      }
+      // Draw label background
+      const labelHeight = 30;
+      const labelText = face.studentName || 'Unknown';
+      ctx.fillStyle = isRecognized ? '#10b981' : '#ef4444';
+      ctx.fillRect(x, y - labelHeight, width, labelHeight);
+      
+      // Draw label text
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px Arial';
+      ctx.fillText(labelText, x + 5, y - 8);
     });
   };
 
@@ -262,46 +305,96 @@ const TakeAttendance = () => {
           </CardContent>
         </Card>
 
-        {/* Camera Feed */}
-        <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.1s" }}>
-          <CardHeader>
-            <CardTitle>Live Camera Feed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-              <canvas
-                ref={canvasRef}
-                className="absolute inset-0 w-full h-full"
-              />
-              {!isStreaming && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <Camera className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">Select a class and start camera to begin</p>
+        {/* Camera Feed and Student List */}
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Camera Feed */}
+          <Card className="lg:col-span-2 border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.1s" }}>
+            <CardHeader>
+              <CardTitle>Live Camera Feed</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                />
+                {!isStreaming && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <Camera className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">Select a class and start camera to begin</p>
+                    </div>
                   </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Student Attendance List */}
+          {selectedClass && classStudents.length > 0 && (
+            <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.2s" }}>
+              <CardHeader>
+                <CardTitle>Class Students</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Present: {markedAttendance.size} / {classStudents.length}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {classStudents.map((student, index) => {
+                    const isPresent = markedAttendance.has(student.id);
+                    return (
+                      <div
+                        key={student.id}
+                        className={`p-3 rounded-lg border transition-all duration-300 animate-fade-in hover:scale-102`}
+                        style={{ 
+                          animationDelay: `${index * 0.03}s`,
+                          backgroundColor: isPresent ? 'hsl(var(--success) / 0.1)' : 'hsl(var(--muted) / 0.5)',
+                          borderColor: isPresent ? 'hsl(var(--success) / 0.3)' : 'hsl(var(--border))',
+                          color: isPresent ? 'hsl(var(--success-foreground))' : 'hsl(var(--foreground))'
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`font-medium ${isPresent ? 'text-success' : ''}`}>
+                              {student.name}
+                            </p>
+                            {student.student_id && (
+                              <p className="text-xs opacity-70">
+                                ID: {student.student_id}
+                              </p>
+                            )}
+                          </div>
+                          {isPresent && (
+                            <div className="w-3 h-3 rounded-full bg-success animate-pulse-glow" />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         {/* Attendance Summary */}
         {markedAttendance.size > 0 && (
           <Card className="border-success/50 animate-fade-in-up hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
-              <CardTitle className="text-success">Attendance Marked: {markedAttendance.size} students</CardTitle>
+              <CardTitle className="text-success">Recently Marked: {markedAttendance.size} students</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                 {Array.from(markedAttendance).map((studentId, index) => {
-                  const student = students.find(s => s.id === studentId);
+                  const student = classStudents.find(s => s.id === studentId) || students.find(s => s.id === studentId);
                   return (
                     <div 
                       key={studentId} 
