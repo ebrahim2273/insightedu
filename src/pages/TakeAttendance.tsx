@@ -245,20 +245,31 @@ const TakeAttendance = () => {
         if (!visionRef.current) {
           console.log("Loading MediaPipe WASM files...");
           visionRef.current = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
           );
           console.log("MediaPipe WASM loaded successfully");
         }
         console.log("Creating MediaPipe face detector...");
-        mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-          minDetectionConfidence: 0.5,
-        });
+        try {
+          mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
+            baseOptions: {
+              modelAssetPath:
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm/face_detection_short_range.tflite",
+            },
+            runningMode: "VIDEO",
+            minDetectionConfidence: 0.5,
+          });
+        } catch (merr) {
+          console.warn("Primary model URL failed, retrying with stable version...", merr);
+          mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
+            baseOptions: {
+              modelAssetPath:
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm/face_detection_short_range.tflite",
+            },
+            runningMode: "VIDEO",
+            minDetectionConfidence: 0.5,
+          });
+        }
         console.log("MediaPipe face detector created successfully");
         setDetectorSupported(true);
         toast({
@@ -297,19 +308,30 @@ const TakeAttendance = () => {
           if (!visionRef.current) {
             console.log("Loading MediaPipe WASM files...");
             visionRef.current = await FilesetResolver.forVisionTasks(
-              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
             );
           }
           console.log("Creating MediaPipe face detector...");
-          mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
-            baseOptions: {
-              modelAssetPath:
-                "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
-              delegate: "GPU",
-            },
-            runningMode: "VIDEO",
-            minDetectionConfidence: 0.5,
-          });
+          try {
+            mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
+              baseOptions: {
+                modelAssetPath:
+                  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm/face_detection_short_range.tflite",
+              },
+              runningMode: "VIDEO",
+              minDetectionConfidence: 0.5,
+            });
+          } catch (merr) {
+            console.warn("Primary model URL failed, retrying with stable version...", merr);
+            mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
+              baseOptions: {
+                modelAssetPath:
+                  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm/face_detection_short_range.tflite",
+              },
+              runningMode: "VIDEO",
+              minDetectionConfidence: 0.5,
+            });
+          }
           setDetectorSupported(true);
           toast({
             title: "Face detection active",
