@@ -17,9 +17,9 @@ interface StudentDescriptors {
   descriptors: Float32Array[];
 }
 
-const SIMILARITY_THRESHOLD = 0.5; // More strict threshold
-const MIN_CONFIDENCE_PERCENTAGE = 70; // Require at least 70% match
-const REQUIRED_CONSECUTIVE_MATCHES = 3; // Need 3 consecutive matches to confirm
+const SIMILARITY_THRESHOLD = 0.58; // Balanced threshold
+const MIN_CONFIDENCE_PERCENTAGE = 65; // Require at least 65% match
+const REQUIRED_CONSECUTIVE_MATCHES = 2; // Need 2 consecutive matches to confirm
 
 const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
