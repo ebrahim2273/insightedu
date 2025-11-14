@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Camera, Trash2, Check, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { generateFaceEmbedding, initFaceModel } from "@/lib/faceEmbedding";
+import { loadFaceApiModels, generateFaceDescriptor } from "@/lib/faceApiHelper";
 
 const AddStudent = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -43,7 +43,7 @@ const AddStudent = () => {
   const preloadModel = async () => {
     try {
       setModelLoading(true);
-      await initFaceModel();
+      await loadFaceApiModels();
       setModelLoading(false);
     } catch (error) {
       console.error('Model preload failed:', error);
@@ -262,17 +262,26 @@ const AddStudent = () => {
       // Generate embeddings for each captured image
       toast({
         title: "Processing",
-        description: `Generating embeddings from ${capturedImages.length} images...`,
+        description: `Generating face descriptors from ${capturedImages.length} images...`,
       });
 
-      const embeddings = [];
+      const descriptors = [];
       for (let i = 0; i < capturedImages.length; i++) {
-        const image = capturedImages[i];
-        const embedding = await generateFaceEmbedding(image);
-        embeddings.push(embedding);
+        const imageData = capturedImages[i];
+        
+        // Convert data URL to Image element
+        const img = new Image();
+        img.src = imageData;
+        await new Promise((resolve) => { img.onload = resolve; });
+        
+        // Generate face descriptor
+        const descriptor = await generateFaceDescriptor(img);
+        if (descriptor) {
+          descriptors.push(Array.from(descriptor));
+        }
         
         // Update progress
-        if ((i + 1) % 2 === 0) {
+        if ((i + 1) % 5 === 0) {
           toast({
             title: "Processing",
             description: `Processed ${i + 1} of ${capturedImages.length} images...`,
@@ -280,13 +289,17 @@ const AddStudent = () => {
         }
       }
 
-      // Store embeddings in database
-      for (let i = 0; i < capturedImages.length; i++) {
+      if (descriptors.length === 0) {
+        throw new Error('No faces detected in captured images');
+      }
+
+      // Store descriptors in database
+      for (let i = 0; i < descriptors.length; i++) {
         await supabase
           .from('face_embeddings')
           .insert([{
             student_id: student.id,
-            embedding_data: { embedding: embeddings[i] },
+            embedding_data: { embedding: descriptors[i] },
             image_url: capturedImages[i],
           }]);
       }
