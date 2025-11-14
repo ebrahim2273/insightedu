@@ -5,12 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
+import { useLanguage } from "@/lib/language";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { Languages } from "lucide-react";
 
 const Settings = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { language, setLanguage, isArabic } = useLanguage();
   const [settings, setSettings] = useState({
     notifications: true,
     emailAlerts: false,
@@ -32,6 +35,34 @@ const Settings = () => {
           <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
           <p className="text-muted-foreground">Manage your account and application preferences</p>
         </div>
+
+        {/* Language Settings */}
+        <Card className="border-border/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Languages className="w-5 h-5" />
+              Language
+            </CardTitle>
+            <CardDescription>Choose your preferred language</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>العربية (Arabic)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Switch between English and Arabic
+                </p>
+              </div>
+              <Switch
+                checked={isArabic}
+                onCheckedChange={(checked) => setLanguage(checked ? "ar" : "en")}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Current Language: {isArabic ? "Arabic (العربية)" : "English"}
+            </p>
+          </CardContent>
+        </Card>
 
         {/* Profile */}
         <Card className="border-border/50">
