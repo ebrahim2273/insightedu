@@ -17,8 +17,8 @@ interface StudentDescriptors {
   descriptors: Float32Array[];
 }
 
-const SIMILARITY_THRESHOLD = 0.58; // Balanced threshold
-const MIN_CONFIDENCE_PERCENTAGE = 65; // Require at least 65% match
+const SIMILARITY_THRESHOLD = 0.6; // Standard face-api.js threshold
+const MIN_CONFIDENCE_PERCENTAGE = 75; // Require at least 75% match
 const REQUIRED_CONSECUTIVE_MATCHES = 2; // Need 2 consecutive matches to confirm
 
 const TakeAttendance = () => {

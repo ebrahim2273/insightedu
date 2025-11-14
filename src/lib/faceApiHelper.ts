@@ -35,7 +35,7 @@ export async function detectFacesWithDescriptors(video: HTMLVideoElement) {
   }
   
   const detections = await faceapi
-    .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+    .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
     .withFaceLandmarks()
     .withFaceDescriptors();
   
@@ -76,7 +76,7 @@ export function euclideanDistance(desc1: Float32Array | number[], desc2: Float32
 
 /**
  * Find best matching student from face descriptor
- * Returns similarity as percentage (0-100)
+ * Uses improved confidence calculation for accurate percentages
  */
 export function findBestMatchFromDescriptor(
   faceDescriptor: Float32Array,
@@ -87,20 +87,50 @@ export function findBestMatchFromDescriptor(
   let lowestDistance = Infinity;
   
   for (const student of studentDescriptors) {
+    // Calculate average distance across all descriptors for this student
+    let totalDistance = 0;
+    let validDescriptors = 0;
+    
     for (const descriptor of student.descriptors) {
       const distance = euclideanDistance(faceDescriptor, descriptor);
+      totalDistance += distance;
+      validDescriptors++;
       
-      // Convert distance to similarity percentage (0.6 distance ~= 0% match, 0 distance = 100% match)
-      const similarity = Math.max(0, Math.min(100, ((threshold - distance) / threshold) * 100));
-      
-      if (distance < lowestDistance && distance < threshold) {
+      // Also track the best single match
+      if (distance < lowestDistance) {
         lowestDistance = distance;
-        bestMatch = {
-          studentId: student.studentId,
-          studentName: student.studentName,
-          confidence: similarity,
-        };
       }
+    }
+    
+    if (validDescriptors === 0) continue;
+    
+    const avgDistance = totalDistance / validDescriptors;
+    
+    // Use the better of average or best match
+    const finalDistance = Math.min(avgDistance, lowestDistance);
+    
+    // Convert distance to confidence percentage using improved formula
+    // Standard face-api.js distances: 0-0.4 excellent, 0.4-0.6 good, >0.6 poor
+    let confidence: number;
+    if (finalDistance < 0.35) {
+      // Excellent match: 90-100%
+      confidence = 100 - (finalDistance / 0.35) * 10;
+    } else if (finalDistance < 0.5) {
+      // Good match: 75-90%
+      confidence = 90 - ((finalDistance - 0.35) / 0.15) * 15;
+    } else if (finalDistance < threshold) {
+      // Acceptable match: 60-75%
+      confidence = 75 - ((finalDistance - 0.5) / (threshold - 0.5)) * 15;
+    } else {
+      confidence = 0;
+    }
+    
+    if (finalDistance < threshold && confidence > (bestMatch?.confidence || 0)) {
+      bestMatch = {
+        studentId: student.studentId,
+        studentName: student.studentName,
+        confidence: Math.round(confidence),
+      };
     }
   }
   
