@@ -3,9 +3,11 @@ import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Camera, Square } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Camera, Square, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { generateFaceEmbedding, findBestMatch } from "@/lib/faceEmbedding";
 
 interface DetectedFace {
   box: { x: number; y: number; width: number; height: number };
@@ -28,6 +30,9 @@ const TakeAttendance = () => {
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
   const [markedAttendance, setMarkedAttendance] = useState<Set<string>>(new Set());
   const [detectorSupported, setDetectorSupported] = useState<boolean>(typeof (window as any).FaceDetector !== 'undefined');
+  const [detectionCount, setDetectionCount] = useState(0);
+  const [isLoadingModel, setIsLoadingModel] = useState(false);
+  const [studentEmbeddings, setStudentEmbeddings] = useState<Array<{ studentId: string; studentName: string; embedding: number[] }>>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -45,9 +50,62 @@ const TakeAttendance = () => {
   useEffect(() => {
     if (selectedClass) {
       fetchClassStudents();
+      loadStudentEmbeddings();
       setMarkedAttendance(new Set());
     }
   }, [selectedClass]);
+
+  const loadStudentEmbeddings = async () => {
+    if (!selectedClass) return;
+    
+    setIsLoadingModel(true);
+    try {
+      // Fetch students with their face embeddings
+      const { data: studentsData } = await supabase
+        .from('students')
+        .select('id, name, face_embeddings(embedding_data)')
+        .eq('class_id', selectedClass)
+        .eq('status', 'active');
+
+      if (!studentsData) return;
+
+      // Extract embeddings
+      const embeddings: Array<{ studentId: string; studentName: string; embedding: number[] }> = [];
+      
+      for (const student of studentsData) {
+        const faceEmbeddings = student.face_embeddings as any[];
+        if (faceEmbeddings && faceEmbeddings.length > 0) {
+          // Use the first embedding for each student
+          const embeddingData = faceEmbeddings[0].embedding_data;
+          if (embeddingData && embeddingData.embedding) {
+            embeddings.push({
+              studentId: student.id,
+              studentName: student.name,
+              embedding: embeddingData.embedding,
+            });
+          }
+        }
+      }
+
+      setStudentEmbeddings(embeddings);
+      
+      if (embeddings.length > 0) {
+        toast({
+          title: "Face recognition ready",
+          description: `Loaded ${embeddings.length} student face profiles`,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading embeddings:', error);
+      toast({
+        title: "Warning",
+        description: "Could not load face recognition data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingModel(false);
+    }
+  };
 
   const fetchClasses = async () => {
     const { data } = await supabase
@@ -215,16 +273,65 @@ const TakeAttendance = () => {
       try {
         // @ts-ignore - FaceDetector types not available
         const faces = await faceDetectorRef.current.detect(video);
-        const mapped: DetectedFace[] = (faces || []).map((f: any) => ({
-          box: {
+        
+        // Update detection count
+        setDetectionCount(faces.length);
+        
+        // Process each detected face for recognition
+        const mappedFaces: DetectedFace[] = [];
+        
+        for (const f of faces || []) {
+          const faceBox = {
             x: f.boundingBox?.x ?? 0,
             y: f.boundingBox?.y ?? 0,
             width: f.boundingBox?.width ?? 0,
             height: f.boundingBox?.height ?? 0,
-          },
-        }));
-        setDetectedFaces(mapped);
-        drawDetections(mapped);
+          };
+          
+          let recognizedStudent: { studentId: string; studentName: string; confidence: number } | null = null;
+          
+          // Try to recognize the face if we have student embeddings
+          if (studentEmbeddings.length > 0 && canvasRef.current) {
+            try {
+              // Extract face region from video
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = faceBox.width;
+              tempCanvas.height = faceBox.height;
+              const tempCtx = tempCanvas.getContext('2d');
+              
+              if (tempCtx) {
+                tempCtx.drawImage(
+                  video,
+                  faceBox.x, faceBox.y, faceBox.width, faceBox.height,
+                  0, 0, faceBox.width, faceBox.height
+                );
+                
+                const faceImageData = tempCanvas.toDataURL('image/jpeg', 0.8);
+                const faceEmbedding = await generateFaceEmbedding(faceImageData);
+                
+                // Find best match
+                recognizedStudent = findBestMatch(faceEmbedding, studentEmbeddings, 0.5);
+                
+                // Auto-mark attendance for recognized students
+                if (recognizedStudent && !markedAttendance.has(recognizedStudent.studentId)) {
+                  await markAttendance(recognizedStudent.studentId, 'present');
+                }
+              }
+            } catch (err) {
+              // Face recognition failed for this face, continue with detection only
+            }
+          }
+          
+          mappedFaces.push({
+            box: faceBox,
+            studentId: recognizedStudent?.studentId,
+            studentName: recognizedStudent?.studentName,
+            confidence: recognizedStudent?.confidence,
+          });
+        }
+        
+        setDetectedFaces(mappedFaces);
+        drawDetections(mappedFaces);
       } catch (err) {
         // Silent fail - detection errors are common
       }
@@ -322,31 +429,85 @@ const TakeAttendance = () => {
         {/* Controls */}
         <Card className="border-border/50 animate-scale-in">
           <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <Select value={selectedClass} onValueChange={setSelectedClass}>
-                  <SelectTrigger className="transition-all duration-200 hover:border-primary/50">
-                    <SelectValue placeholder="Select a class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classes.map(cls => (
-                      <SelectItem key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Select value={selectedClass} onValueChange={setSelectedClass} disabled={isLoadingModel}>
+                    <SelectTrigger className="transition-all duration-200 hover:border-primary/50">
+                      <SelectValue placeholder="Select a class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.map(cls => (
+                        <SelectItem key={cls.id} value={cls.id}>
+                          {cls.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {!isStreaming ? (
+                  <Button 
+                    onClick={startCamera} 
+                    className="gap-2 hover:scale-105 transition-transform duration-200"
+                    disabled={isLoadingModel || !selectedClass}
+                  >
+                    {isLoadingModel ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-4 h-4" />
+                        Start Camera
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button onClick={stopCamera} variant="destructive" className="gap-2 hover:scale-105 transition-transform duration-200">
+                    <Square className="w-4 h-4" />
+                    Stop Camera
+                  </Button>
+                )}
               </div>
-              {!isStreaming ? (
-                <Button onClick={startCamera} className="gap-2 hover:scale-105 transition-transform duration-200">
-                  <Camera className="w-4 h-4" />
-                  Start Camera
-                </Button>
-              ) : (
-                <Button onClick={stopCamera} variant="destructive" className="gap-2 hover:scale-105 transition-transform duration-200">
-                  <Square className="w-4 h-4" />
-                  Stop Camera
-                </Button>
+
+              {/* Detection Status Indicators */}
+              {isStreaming && (
+                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border border-border/50">
+                  <div className="flex items-center gap-2">
+                    {detectorSupported ? (
+                      <Badge variant="default" className="gap-1.5">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Face Detection Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="gap-1.5">
+                        <XCircle className="w-3 h-3" />
+                        Detection Unavailable
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {detectorSupported && (
+                    <>
+                      <div className="h-4 w-px bg-border" />
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Faces Detected:</span>
+                        <Badge variant="secondary" className="font-mono">
+                          {detectionCount}
+                        </Badge>
+                      </div>
+                      
+                      <div className="h-4 w-px bg-border" />
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Face Database:</span>
+                        <Badge variant="secondary" className="font-mono">
+                          {studentEmbeddings.length} students
+                        </Badge>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </CardContent>
