@@ -67,7 +67,7 @@ const Landing = () => {
       <div className="relative z-10">
         {/* Hero Section */}
         <section className="container mx-auto px-4 py-16 md:py-24">
-          <div className="text-center max-w-4xl mx-auto animate-fade-in">
+          <div className="text-center max-w-4xl mx-auto">
             <div className="inline-block mb-4">
               <div className="flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full border border-primary/20">
                 <Camera className="w-4 h-4 text-primary" />
@@ -120,8 +120,7 @@ const Landing = () => {
             {features.map((feature, index) => (
               <Card 
                 key={index}
-                className="p-6 border-2 border-border/50 hover:border-primary/50 transition-all duration-300 animate-fade-in"
-                style={{ animationDelay: `${index * 0.1}s` }}
+                className="p-6 border-2 border-border/50 hover:border-primary/50 transition-all duration-200"
               >
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                   <feature.icon className="w-6 h-6 text-primary" />
@@ -146,8 +145,7 @@ const Landing = () => {
             {teamMembers.map((member, index) => (
               <Card 
                 key={index}
-                className="p-6 border-2 border-primary/30 bg-card/50 backdrop-blur-sm hover:border-primary transition-all duration-300 hover:-translate-y-2 animate-fade-in"
-                style={{ animationDelay: `${index * 0.1}s` }}
+                className="p-6 border-2 border-primary/30 bg-card/50 backdrop-blur-sm hover:border-primary transition-all duration-200 hover:-translate-y-1"
               >
                 <div className="text-center">
                   <div className="text-5xl font-bold text-primary/80 mb-4">{member.number}</div>
