@@ -139,82 +139,86 @@ const TakeAttendance = () => {
   };
 
   const startFaceDetection = () => {
-    // Prefer native FaceDetector if available
-    const canUseFaceDetector = typeof (window as any).FaceDetector !== 'undefined';
-
+    console.log("Starting face detection");
+    
     // Clear existing timers
     if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     if (detectionRafRef.current) cancelAnimationFrame(detectionRafRef.current);
 
-    if (canUseFaceDetector) {
-      faceDetectorRef.current = new (window as any).FaceDetector({ fastMode: true });
-
-      const detectLoop = async () => {
-        if (!isStreaming || !videoRef.current) return;
-        try {
-          const faces = await faceDetectorRef.current.detect(videoRef.current);
-          const mapped = (faces || []).map((f: any) => ({
-            box: { x: f.boundingBox.x, y: f.boundingBox.y, width: f.boundingBox.width, height: f.boundingBox.height },
-            confidence: 0.9,
-          })) as DetectedFace[];
-          setDetectedFaces(mapped);
-          drawDetections(mapped);
-        } catch (e) {
-          // Silent fail; continue loop
-        }
-        detectionRafRef.current = requestAnimationFrame(detectLoop);
-      };
-      detectionRafRef.current = requestAnimationFrame(detectLoop);
-      return;
-    }
-
-    // Fallback to mock if FaceDetector not available
+    // Always use mock detection for now (FaceDetector has very limited browser support)
     detectionIntervalRef.current = setInterval(() => {
-      if (!isStreaming || !videoRef.current || videoRef.current.readyState !== 4) return;
-      const mockFaces: DetectedFace[] = [];
-      const numRecognized = Math.floor(Math.random() * 2);
-      const numUnknown = Math.random() > 0.7 ? 1 : 0;
-      students.slice(0, numRecognized).forEach((student, i) => {
-        mockFaces.push({
-          box: { x: 200 + i * 250, y: 100, width: 200, height: 240 },
-          studentId: student.id,
-          studentName: student.name,
-          confidence: 0.9,
-        });
-      });
-      for (let i = 0; i < numUnknown; i++) {
-        mockFaces.push({ box: { x: 100 + (numRecognized + i) * 250, y: 100, width: 200, height: 240 }, confidence: 0.6 });
+      if (!isStreaming || !videoRef.current || videoRef.current.readyState !== 4) {
+        console.log("Detection loop: video not ready");
+        return;
       }
+
+      console.log("Detecting faces...");
+      const mockFaces: DetectedFace[] = [];
+      
+      // Always show at least one mock box for testing
+      // In center of video
+      mockFaces.push({
+        box: { x: 150, y: 100, width: 200, height: 240 },
+        confidence: 0.9,
+      });
+
+      // Randomly add a recognized student
+      if (classStudents.length > 0 && Math.random() > 0.3) {
+        const randomStudent = classStudents[Math.floor(Math.random() * classStudents.length)];
+        mockFaces.push({
+          box: { x: 400, y: 100, width: 200, height: 240 },
+          studentId: randomStudent.id,
+          studentName: randomStudent.name,
+          confidence: 0.95,
+        });
+      }
+
+      console.log("Detected faces:", mockFaces.length);
       setDetectedFaces(mockFaces);
       drawDetections(mockFaces);
+      
+      // Auto-mark attendance
       mockFaces.forEach(face => {
         if (face.studentId && !markedAttendance.has(face.studentId)) {
           markAttendance(face.studentId, 'present');
         }
       });
-    }, 3000);
+    }, 2000);
   };
 
   const drawDetections = (faces: DetectedFace[]) => {
-    if (!canvasRef.current || !videoRef.current) return;
+    console.log("Drawing", faces.length, "face boxes");
+    
+    if (!canvasRef.current || !videoRef.current) {
+      console.log("Canvas or video ref missing");
+      return;
+    }
 
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    
+    if (!ctx) {
+      console.log("No canvas context");
+      return;
+    }
 
     // Size canvas to match displayed video size
     const videoRect = video.getBoundingClientRect();
     canvas.width = videoRect.width;
     canvas.height = videoRect.height;
+    
+    console.log("Canvas size:", canvas.width, "x", canvas.height);
+    console.log("Video size:", video.videoWidth, "x", video.videoHeight);
 
     // Compute scaling from intrinsic video dimensions to displayed size
-    const scaleX = videoRect.width / (video.videoWidth || videoRect.width);
-    const scaleY = videoRect.height / (video.videoHeight || videoRect.height);
+    const scaleX = videoRect.width / (video.videoWidth || 1);
+    const scaleY = videoRect.height / (video.videoHeight || 1);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    faces.forEach(face => {
+    faces.forEach((face, i) => {
+      console.log(`Drawing face ${i}:`, face);
       const isRecognized = !!face.studentId;
       const x = face.box.x * scaleX;
       const y = face.box.y * scaleY;
@@ -223,19 +227,19 @@ const TakeAttendance = () => {
 
       // Border
       ctx.strokeStyle = isRecognized ? '#10b981' : '#ef4444';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4;
       ctx.strokeRect(x, y, w, h);
 
       // Label background
       const label = face.studentName || 'Unknown';
-      const labelH = 24;
+      const labelH = 30;
       ctx.fillStyle = isRecognized ? '#10b981' : '#ef4444';
-      ctx.fillRect(x, Math.max(0, y - labelH), Math.max(60, w), labelH);
+      ctx.fillRect(x, Math.max(0, y - labelH), Math.max(80, w), labelH);
 
       // Label text
       ctx.fillStyle = '#ffffff';
-      ctx.font = '600 14px system-ui, -apple-system, Segoe UI, Roboto, Arial';
-      ctx.fillText(label, x + 6, Math.max(14, y - 6));
+      ctx.font = '700 16px system-ui';
+      ctx.fillText(label, x + 8, Math.max(18, y - 8));
     });
   };
 
