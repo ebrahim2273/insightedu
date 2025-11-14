@@ -10,7 +10,7 @@ import {
   UserPlus, 
   Settings, 
   LogOut,
-  Radar
+  Eye
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -47,7 +47,7 @@ const Layout = ({ children }: LayoutProps) => {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 text-xl font-bold text-primary">
-              <Radar className="w-6 h-6" />
+              <Eye className="w-6 h-6" />
               <span>InSight</span>
             </Link>
 
