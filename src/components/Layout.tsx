@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,13 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const { signOut } = useAuth();
+  const [transitioning, setTransitioning] = useState(false);
+
+  useEffect(() => {
+    setTransitioning(true);
+    const t = setTimeout(() => setTransitioning(false), 250);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
   
   const navItems = [
     { name: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -32,7 +39,7 @@ const Layout = ({ children }: LayoutProps) => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Navigation Bar */}
       <nav className="bg-card border-b border-border">
         <div className="container mx-auto px-6">
@@ -77,9 +84,20 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
       </nav>
 
+      {/* Page transition overlay */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none fixed inset-0 bg-background transition-opacity duration-200",
+          transitioning ? "opacity-60" : "opacity-0"
+        )}
+      />
+
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        {children}
+        <div key={location.pathname} className="animate-fade-in">
+          {children}
+        </div>
       </main>
     </div>
   );

@@ -29,14 +29,16 @@ const ClassManagement = () => {
   }, []);
 
   const fetchClasses = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('classes')
-      .select(`
-        *,
-        students:students(count)
-      `)
-      .order('name');
-    
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      setClasses([]);
+      return;
+    }
     setClasses(data || []);
   };
 
