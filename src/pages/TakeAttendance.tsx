@@ -240,21 +240,33 @@ const TakeAttendance = () => {
     // Prefer the native FaceDetector API. If unavailable, initialize MediaPipe fallback.
     const FaceDetectorCtor = (window as any).FaceDetector;
     if (!FaceDetectorCtor) {
+      console.log("Native FaceDetector not available, trying MediaPipe...");
       try {
         if (!visionRef.current) {
+          console.log("Loading MediaPipe WASM files...");
           visionRef.current = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
           );
+          console.log("MediaPipe WASM loaded successfully");
         }
+        console.log("Creating MediaPipe face detector...");
         mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
           baseOptions: {
             modelAssetPath:
-              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm/face_detection_short_range.tflite",
+              "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+            delegate: "GPU",
           },
           runningMode: "VIDEO",
+          minDetectionConfidence: 0.5,
         });
+        console.log("MediaPipe face detector created successfully");
         setDetectorSupported(true);
+        toast({
+          title: "Face detection active",
+          description: "Using MediaPipe face detector (GPU accelerated)",
+        });
       } catch (e) {
+        console.error("MediaPipe initialization failed:", e);
         setDetectorSupported(false);
         // Draw guide frame periodically while streaming
         detectionIntervalRef.current = setInterval(() => {
@@ -264,31 +276,47 @@ const TakeAttendance = () => {
         toast({
           title: "Face detection unavailable",
           description:
-            "This browser lacks native detection and the fallback failed to load. Use manual marking or try Chrome/Edge.",
+            "Could not load face detection models. Check your internet connection or try refreshing.",
+          variant: "destructive",
         });
         return;
       }
     } else {
+      console.log("Using native FaceDetector API");
       setDetectorSupported(true);
       try {
         faceDetectorRef.current = new FaceDetectorCtor({ fastMode: true });
+        toast({
+          title: "Face detection active",
+          description: "Using native browser face detector",
+        });
       } catch (e) {
+        console.warn("Native FaceDetector failed, falling back to MediaPipe:", e);
         // If native fails, try fallback once
         try {
           if (!visionRef.current) {
+            console.log("Loading MediaPipe WASM files...");
             visionRef.current = await FilesetResolver.forVisionTasks(
-              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
             );
           }
+          console.log("Creating MediaPipe face detector...");
           mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
             baseOptions: {
               modelAssetPath:
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm/face_detection_short_range.tflite",
+                "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+              delegate: "GPU",
             },
             runningMode: "VIDEO",
+            minDetectionConfidence: 0.5,
           });
           setDetectorSupported(true);
+          toast({
+            title: "Face detection active",
+            description: "Using MediaPipe face detector (GPU accelerated)",
+          });
         } catch (err) {
+          console.error("All face detection methods failed:", err);
           setDetectorSupported(false);
           toast({
             title: "Face detection error",
