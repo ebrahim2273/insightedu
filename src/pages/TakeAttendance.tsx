@@ -7,711 +7,701 @@ import { Badge } from "@/components/ui/badge";
 import { Camera, Square, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { generateFaceEmbedding, findBestMatch } from "@/lib/faceEmbedding";
+import { generateFaceEmbedding, cosineSimilarity, initFaceModel } from "@/lib/faceEmbedding";
 import { FaceDetector as MPFaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 
 interface DetectedFace {
-  box: { x: number; y: number; width: number; height: number };
+  boundingBox: { x: number; y: number; width: number; height: number };
   studentId?: string;
   studentName?: string;
   confidence?: number;
 }
 
+const SIMILARITY_THRESHOLD = 0.65;
+
 const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const detectionRafRef = useRef<number | null>(null);
   const faceDetectorRef = useRef<any | null>(null);
   const mpFaceDetectorRef = useRef<any | null>(null);
   const visionRef = useRef<any | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const markedStudents = useRef<Set<string>>(new Set());
+  
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [classes, setClasses] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
-  const [classStudents, setClassStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
-  const [markedAttendance, setMarkedAttendance] = useState<Set<string>>(new Set());
-  const [detectorSupported, setDetectorSupported] = useState<boolean>(typeof (window as any).FaceDetector !== 'undefined');
-  const [detectionCount, setDetectionCount] = useState(0);
-  const [isLoadingModel, setIsLoadingModel] = useState(false);
-  const [studentEmbeddings, setStudentEmbeddings] = useState<Array<{ studentId: string; studentName: string; embedding: number[] }>>([]);
+  const [detectorSupported, setDetectorSupported] = useState<boolean>(false);
+  const [detectorType, setDetectorType] = useState<'native' | 'mediapipe' | 'unavailable'>('unavailable');
+  const [faceCount, setFaceCount] = useState<number>(0);
+  const [profilesLoaded, setProfilesLoaded] = useState<number>(0);
+  const [studentEmbeddings, setStudentEmbeddings] = useState<Array<{ 
+    studentId: string; 
+    studentName: string; 
+    embedding: number[];
+    embeddings: number[][];
+  }>>([]);
+  
   const { toast } = useToast();
 
+  // Fetch classes and students on mount + preload MediaPipe
   useEffect(() => {
     fetchClasses();
-    fetchStudents();
+    
+    // Preload MediaPipe WASM
+    const preloadMediaPipe = async () => {
+      try {
+        if (!visionRef.current) {
+          console.log('Preloading MediaPipe WASM...');
+          visionRef.current = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+          );
+          console.log('MediaPipe WASM preloaded');
+        }
+      } catch (error) {
+        console.warn('MediaPipe preload failed:', error);
+      }
+    };
+    
+    preloadMediaPipe();
     
     return () => {
       stopCamera();
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-      }
     };
   }, []);
 
+  // Fetch students when class changes
   useEffect(() => {
     if (selectedClass) {
-      fetchClassStudents();
-      loadStudentEmbeddings();
-      setMarkedAttendance(new Set());
+      fetchStudents();
+      markedStudents.current.clear();
     }
   }, [selectedClass]);
 
-  const loadStudentEmbeddings = async () => {
-    if (!selectedClass) return;
-    
-    setIsLoadingModel(true);
+  const fetchClasses = async () => {
     try {
-      // Fetch students with their face embeddings
-      const { data: studentsData } = await supabase
-        .from('students')
-        .select('id, name, face_embeddings(embedding_data)')
-        .eq('class_id', selectedClass)
-        .eq('status', 'active');
-
-      if (!studentsData) return;
-
-      // Extract embeddings
-      const embeddings: Array<{ studentId: string; studentName: string; embedding: number[] }> = [];
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .order('name');
       
-      for (const student of studentsData) {
-        const faceEmbeddings = student.face_embeddings as any[];
-        if (faceEmbeddings && faceEmbeddings.length > 0) {
-          // Use the first embedding for each student
-          const embeddingData = faceEmbeddings[0].embedding_data;
-          if (embeddingData && embeddingData.embedding) {
-            embeddings.push({
-              studentId: student.id,
-              studentName: student.name,
-              embedding: embeddingData.embedding,
-            });
-          }
-        }
-      }
-
-      setStudentEmbeddings(embeddings);
-      
-      if (embeddings.length > 0) {
-        toast({
-          title: "Face recognition ready",
-          description: `Loaded ${embeddings.length} student face profiles`,
-        });
-      }
+      if (error) throw error;
+      setClasses(data || []);
     } catch (error) {
-      console.error('Error loading embeddings:', error);
+      console.error('Error fetching classes:', error);
       toast({
-        title: "Warning",
-        description: "Could not load face recognition data",
+        title: "Error",
+        description: "Failed to load classes",
         variant: "destructive",
       });
-    } finally {
-      setIsLoadingModel(false);
     }
-  };
-
-  const fetchClasses = async () => {
-    const { data } = await supabase
-      .from('classes')
-      .select('*')
-      .order('name');
-    setClasses(data || []);
   };
 
   const fetchStudents = async () => {
-    const { data } = await supabase
-      .from('students')
-      .select('*, face_embeddings(*)')
-      .eq('status', 'active');
-    setStudents(data || []);
-  };
-
-  const fetchClassStudents = async () => {
     if (!selectedClass) return;
-    const { data } = await supabase
-      .from('students')
-      .select('*')
-      .eq('class_id', selectedClass)
-      .eq('status', 'active')
-      .order('name');
-    setClassStudents(data || []);
+    
+    try {
+      setLoadingStudents(true);
+      console.log(`Fetching students for class: ${selectedClass}`);
+      
+      // Fetch students for selected class
+      const { data: studentsData, error: studentsError } = await supabase
+        .from('students')
+        .select('*')
+        .eq('class_id', selectedClass);
+      
+      if (studentsError) throw studentsError;
+      
+      console.log(`Found ${studentsData?.length || 0} students`);
+      setStudents(studentsData || []);
+      
+      // Fetch face embeddings for these students
+      const studentIds = studentsData?.map(s => s.id) || [];
+      if (studentIds.length === 0) {
+        setStudentEmbeddings([]);
+        setProfilesLoaded(0);
+        return;
+      }
+      
+      const { data: embeddingsData, error: embeddingsError } = await supabase
+        .from('face_embeddings')
+        .select('*')
+        .in('student_id', studentIds);
+      
+      if (embeddingsError) throw embeddingsError;
+      
+      console.log(`Loaded ${embeddingsData?.length || 0} face embeddings`);
+      
+      // Group embeddings by student (store ALL embeddings per student)
+      const embeddingsByStudent = (embeddingsData || []).reduce((acc, emb) => {
+        if (!acc[emb.student_id]) {
+          acc[emb.student_id] = [];
+        }
+        acc[emb.student_id].push(emb.embedding);
+        return acc;
+      }, {} as Record<string, number[][]>);
+      
+      // Create student embeddings array with ALL embeddings
+      const studentEmbeddingsArray = studentsData?.map(student => ({
+        studentId: student.id,
+        studentName: student.name,
+        embedding: embeddingsByStudent[student.id]?.[0] || [], // Keep for compatibility
+        embeddings: embeddingsByStudent[student.id] || [], // All embeddings
+      })) || [];
+      
+      setStudentEmbeddings(studentEmbeddingsArray);
+      setProfilesLoaded(studentEmbeddingsArray.filter(s => s.embeddings.length > 0).length);
+      
+      if (studentEmbeddingsArray.filter(s => s.embeddings.length > 0).length > 0) {
+        toast({
+          title: "Profiles loaded",
+          description: `${studentEmbeddingsArray.filter(s => s.embeddings.length > 0).length} face profiles ready`,
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load students",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingStudents(false);
+    }
   };
 
   const startCamera = async () => {
-    if (!selectedClass) {
-      toast({
-        title: "Error",
-        description: "Please select a class first",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user'
-        }
+        video: { width: 1280, height: 720 },
       });
-
+      
+      streamRef.current = stream;
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
-        };
+        await videoRef.current.play();
         setIsStreaming(true);
-        startFaceDetection();
+        
+        // Set canvas dimensions to match video
+        if (overlayCanvasRef.current) {
+          overlayCanvasRef.current.width = videoRef.current.videoWidth;
+          overlayCanvasRef.current.height = videoRef.current.videoHeight;
+        }
+        
         toast({
-          title: "Camera Started",
-          description: "Face detection is now active",
+          title: "Camera started",
+          description: "Initializing face detection...",
         });
+        
+        // Start face detection
+        await startFaceDetection();
       }
     } catch (error) {
-      console.error("Camera error:", error);
+      console.error('Error accessing camera:', error);
       toast({
-        title: "Error",
-        description: "Failed to access camera. Please allow camera permissions.",
+        title: "Camera error",
+        description: "Failed to access camera",
         variant: "destructive",
       });
     }
   };
 
   const stopCamera = () => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    
     if (detectionRafRef.current) {
       cancelAnimationFrame(detectionRafRef.current);
       detectionRafRef.current = null;
     }
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
+    
     setIsStreaming(false);
     setDetectedFaces([]);
-    if (canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    }
+    setFaceCount(0);
   };
 
   const startFaceDetection = async () => {
-    // Clear existing timers
-    if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
-    if (detectionRafRef.current) cancelAnimationFrame(detectionRafRef.current);
-
-    if (!videoRef.current) return;
-
-    // Helper to keep the guide frame visible when detection is unavailable
-    const drawGuideFrame = () => {
-      if (!canvasRef.current || !videoRef.current) return;
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      const rect = video.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const w = canvas.width * 0.35;
-      const h = canvas.height * 0.45;
-      const x = (canvas.width - w) / 2;
-      const y = (canvas.height - h) / 2;
-      
-      // Get accent color from CSS
-      const accentColor = getCanvasColor('--accent');
-      ctx.strokeStyle = accentColor;
-      ctx.lineWidth = 3;
-      ctx.setLineDash([8, 8]);
-      ctx.strokeRect(x, y, w, h);
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 14px system-ui';
-      const msg = 'Align your face within the frame';
-      const textW = ctx.measureText(msg).width;
-      ctx.fillText(msg, (canvas.width - textW) / 2, Math.max(24, y - 12));
-    };
-
-    // Prefer the native FaceDetector API. If unavailable, initialize MediaPipe fallback.
-    const FaceDetectorCtor = (window as any).FaceDetector;
-    if (!FaceDetectorCtor) {
-      console.log("Native FaceDetector not available, trying MediaPipe...");
-      try {
+    try {
+      // Try native FaceDetector first
+      if ('FaceDetector' in window) {
+        console.log("Trying native FaceDetector API...");
+        const detector = new (window as any).FaceDetector();
+        faceDetectorRef.current = detector;
+        setDetectorSupported(true);
+        setDetectorType('native');
+        console.log("Native FaceDetector initialized successfully");
+        toast({
+          title: "Face detection ready",
+          description: "Using native browser face detection",
+        });
+      } else {
+        // Fallback to MediaPipe
+        console.log("Native FaceDetector not available, using MediaPipe...");
+        
         if (!visionRef.current) {
           console.log("Loading MediaPipe WASM files...");
           visionRef.current = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
           );
           console.log("MediaPipe WASM loaded successfully");
         }
+        
         console.log("Creating MediaPipe face detector...");
         try {
+          // Try Google CDN first
           mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
             baseOptions: {
               modelAssetPath:
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm/face_detection_short_range.tflite",
+                "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+              delegate: "GPU",
             },
             runningMode: "VIDEO",
             minDetectionConfidence: 0.5,
           });
-        } catch (merr) {
-          console.warn("Primary model URL failed, retrying with stable version...", merr);
-          mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
-            baseOptions: {
-              modelAssetPath:
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm/face_detection_short_range.tflite",
-            },
-            runningMode: "VIDEO",
-            minDetectionConfidence: 0.5,
-          });
-        }
-        console.log("MediaPipe face detector created successfully");
-        setDetectorSupported(true);
-        toast({
-          title: "Face detection active",
-          description: "Using MediaPipe face detector (GPU accelerated)",
-        });
-      } catch (e) {
-        console.error("MediaPipe initialization failed:", e);
-        setDetectorSupported(false);
-        // Draw guide frame periodically while streaming
-        detectionIntervalRef.current = setInterval(() => {
-          if (!isStreaming) return;
-          drawGuideFrame();
-        }, 300);
-        toast({
-          title: "Face detection unavailable",
-          description:
-            "Could not load face detection models. Check your internet connection or try refreshing.",
-          variant: "destructive",
-        });
-        return;
-      }
-    } else {
-      console.log("Using native FaceDetector API");
-      setDetectorSupported(true);
-      try {
-        faceDetectorRef.current = new FaceDetectorCtor({ fastMode: true });
-        toast({
-          title: "Face detection active",
-          description: "Using native browser face detector",
-        });
-      } catch (e) {
-        console.warn("Native FaceDetector failed, falling back to MediaPipe:", e);
-        // If native fails, try fallback once
-        try {
-          if (!visionRef.current) {
-            console.log("Loading MediaPipe WASM files...");
-            visionRef.current = await FilesetResolver.forVisionTasks(
-              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
-            );
-          }
-          console.log("Creating MediaPipe face detector...");
+          console.log("MediaPipe face detector created with Google CDN");
+        } catch (cdnError) {
+          console.warn("Google CDN failed, trying local model...", cdnError);
           try {
+            // Fallback to local model
             mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
               baseOptions: {
-                modelAssetPath:
-                  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm/face_detection_short_range.tflite",
+                modelAssetPath: "/models/blaze_face_short_range.tflite",
               },
               runningMode: "VIDEO",
               minDetectionConfidence: 0.5,
             });
-          } catch (merr) {
-            console.warn("Primary model URL failed, retrying with stable version...", merr);
-            mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
-              baseOptions: {
-                modelAssetPath:
-                  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm/face_detection_short_range.tflite",
-              },
-              runningMode: "VIDEO",
-              minDetectionConfidence: 0.5,
-            });
+            console.log("MediaPipe face detector created with local model");
+          } catch (localError) {
+            console.error("Both CDN and local model failed:", localError);
+            throw localError;
           }
-          setDetectorSupported(true);
-          toast({
-            title: "Face detection active",
-            description: "Using MediaPipe face detector (GPU accelerated)",
-          });
-        } catch (err) {
-          console.error("All face detection methods failed:", err);
-          setDetectorSupported(false);
-          toast({
-            title: "Face detection error",
-            description: "Could not initialize any face detector. Try refreshing the page.",
-            variant: "destructive",
-          });
-          return;
         }
+        
+        setDetectorSupported(true);
+        setDetectorType('mediapipe');
+        toast({
+          title: "Face detection active",
+          description: "Using MediaPipe face detection",
+        });
       }
+    } catch (error) {
+      console.error("Face detection initialization failed:", error);
+      setDetectorSupported(false);
+      setDetectorType('unavailable');
+      toast({
+        title: "Detection unavailable",
+        description: "Model load failed. Check network and reload.",
+        variant: "destructive",
+      });
+      return;
     }
-    // Unified face detection (native or MediaPipe)
-    const getFaceBoxes = async (videoEl: HTMLVideoElement) => {
-      // Native FaceDetector
-      if (faceDetectorRef.current) {
-        const faces = await faceDetectorRef.current.detect(videoEl);
-        return (faces || []).map((f: any) => ({
-          x: f.boundingBox?.x ?? 0,
-          y: f.boundingBox?.y ?? 0,
-          width: f.boundingBox?.width ?? 0,
-          height: f.boundingBox?.height ?? 0,
-        }));
-      }
-      // MediaPipe fallback
-      if (mpFaceDetectorRef.current) {
-        const result = mpFaceDetectorRef.current.detectForVideo(videoEl, performance.now());
-        const dets = result?.detections || [];
-        return dets.map((d: any) => ({
-          x: d.boundingBox?.originX ?? 0,
-          y: d.boundingBox?.originY ?? 0,
-          width: d.boundingBox?.width ?? 0,
-          height: d.boundingBox?.height ?? 0,
-        }));
-      }
-      return [] as Array<{ x: number; y: number; width: number; height: number }>;
-    };
 
-    const detect = async () => {
-      if (!isStreaming || !videoRef.current) return;
+    // Preload face embedding model
+    try {
+      console.log("Preloading face embedding model...");
+      await initFaceModel();
+      console.log("Face embedding model ready");
+    } catch (embError) {
+      console.warn("Face embedding model preload failed:", embError);
+    }
+
+    // Start detection loop
+    const detectLoop = async () => {
       const video = videoRef.current;
-      if (video.readyState !== 4) {
-        detectionRafRef.current = requestAnimationFrame(detect);
+      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) {
+        detectionRafRef.current = requestAnimationFrame(detectLoop);
         return;
       }
 
       try {
-        const boxes = await getFaceBoxes(video);
-        setDetectionCount(boxes.length);
-
-        const mappedFaces: DetectedFace[] = [];
-        for (const faceBox of boxes) {
-          let recognizedStudent: { studentId: string; studentName: string; confidence: number } | null = null;
-
-          if (studentEmbeddings.length > 0) {
-            try {
-              const sx = Math.max(0, Math.floor(faceBox.x));
-              const sy = Math.max(0, Math.floor(faceBox.y));
-              const sw = Math.max(1, Math.floor(faceBox.width));
-              const sh = Math.max(1, Math.floor(faceBox.height));
-
-              const tempCanvas = document.createElement('canvas');
-              tempCanvas.width = sw;
-              tempCanvas.height = sh;
-              const tempCtx = tempCanvas.getContext('2d');
-              if (tempCtx) {
-                tempCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
-                const faceImageData = tempCanvas.toDataURL('image/jpeg', 0.8);
-                const faceEmbedding = await generateFaceEmbedding(faceImageData);
-                recognizedStudent = findBestMatch(faceEmbedding, studentEmbeddings, 0.5);
-                if (recognizedStudent && !markedAttendance.has(recognizedStudent.studentId)) {
-                  await markAttendance(recognizedStudent.studentId, 'present');
-                }
-              }
-            } catch {
-              // ignore recognition errors per frame
+        // Use MediaPipe
+        if (mpFaceDetectorRef.current) {
+          const detections = mpFaceDetectorRef.current.detectForVideo(video, performance.now());
+          
+          if (detections && detections.detections) {
+            const newFaces: DetectedFace[] = detections.detections.map((detection: any) => {
+              const bbox = detection.boundingBox;
+              return {
+                boundingBox: {
+                  x: bbox.originX,
+                  y: bbox.originY,
+                  width: bbox.width,
+                  height: bbox.height,
+                },
+                confidence: detection.categories?.[0]?.score || 0,
+              };
+            });
+            
+            setDetectedFaces(newFaces);
+            setFaceCount(newFaces.length);
+            drawDetections(newFaces);
+            
+            // Process faces for recognition
+            for (const face of newFaces) {
+              await processFaceForRecognition(face, video);
             }
+          } else {
+            setFaceCount(0);
           }
-
-          mappedFaces.push({
-            box: faceBox,
-            studentId: recognizedStudent?.studentId,
-            studentName: recognizedStudent?.studentName,
-            confidence: recognizedStudent?.confidence,
-          });
         }
-
-        setDetectedFaces(mappedFaces);
-        drawDetections(mappedFaces);
-      } catch {
-        // ignore detection errors
+        // Use native FaceDetector
+        else if (faceDetectorRef.current) {
+          const detections = await faceDetectorRef.current.detect(video);
+          
+          if (detections && detections.length > 0) {
+            const newFaces: DetectedFace[] = detections.map((detection: any) => ({
+              boundingBox: detection.boundingBox,
+              confidence: detection.confidence || 0,
+            }));
+            
+            setDetectedFaces(newFaces);
+            setFaceCount(newFaces.length);
+            drawDetections(newFaces);
+            
+            // Process faces for recognition
+            for (const face of newFaces) {
+              await processFaceForRecognition(face, video);
+            }
+          } else {
+            setFaceCount(0);
+          }
+        }
+      } catch (error) {
+        console.error('Detection error:', error);
       }
 
-      detectionRafRef.current = requestAnimationFrame(detect);
+      detectionRafRef.current = requestAnimationFrame(detectLoop);
     };
 
-    detectionRafRef.current = requestAnimationFrame(detect);
+    detectLoop();
   };
 
-  const getCanvasColor = (cssVar: string): string => {
-    const computedStyle = getComputedStyle(document.documentElement);
-    const hslValue = computedStyle.getPropertyValue(cssVar).trim();
-    return hslValue ? `hsl(${hslValue})` : '#10b981';
+  const processFaceForRecognition = async (face: DetectedFace, video: HTMLVideoElement) => {
+    try {
+      if (studentEmbeddings.length === 0) return;
+      
+      // Create a canvas to crop face to 224x224
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      const bbox = face.boundingBox;
+      
+      // Set canvas to 224x224 for model input
+      canvas.width = 224;
+      canvas.height = 224;
+      
+      // Calculate source dimensions with padding
+      const padding = 0.2; // 20% padding around face
+      const paddedWidth = bbox.width * (1 + padding * 2);
+      const paddedHeight = bbox.height * (1 + padding * 2);
+      const paddedX = bbox.x - bbox.width * padding;
+      const paddedY = bbox.y - bbox.height * padding;
+      
+      // Draw the face region scaled to 224x224
+      ctx.drawImage(
+        video,
+        paddedX, paddedY, paddedWidth, paddedHeight,
+        0, 0, 224, 224
+      );
+      
+      // Convert canvas to data URL for embedding generation
+      const imageData = canvas.toDataURL('image/jpeg');
+      
+      // Generate embedding for detected face
+      const faceEmbedding = await generateFaceEmbedding(imageData);
+      
+      // Find best match across ALL student embeddings
+      let bestMatch: { studentId: string; studentName: string; confidence: number } | null = null;
+      let highestSimilarity = SIMILARITY_THRESHOLD;
+      
+      for (const student of studentEmbeddings) {
+        const embeddings = student.embeddings || [student.embedding];
+        
+        for (const embedding of embeddings) {
+          if (embedding.length === 0) continue;
+          
+          const similarity = cosineSimilarity(faceEmbedding, embedding);
+          
+          if (similarity > highestSimilarity) {
+            highestSimilarity = similarity;
+            bestMatch = {
+              studentId: student.studentId,
+              studentName: student.studentName,
+              confidence: similarity,
+            };
+          }
+        }
+      }
+      
+      if (bestMatch && !markedStudents.current.has(bestMatch.studentId)) {
+        console.log(`✓ Match found: ${bestMatch.studentName} (${(bestMatch.confidence * 100).toFixed(1)}%)`);
+        
+        // Update detected face with student info
+        setDetectedFaces(prev => prev.map(f => 
+          f.boundingBox === face.boundingBox 
+            ? { ...f, studentId: bestMatch!.studentId, studentName: bestMatch!.studentName }
+            : f
+        ));
+        
+        // Mark attendance
+        await markAttendance(bestMatch.studentId, bestMatch.studentName, bestMatch.confidence);
+      }
+    } catch (error) {
+      console.error('Error processing face:', error);
+    }
   };
 
   const drawDetections = (faces: DetectedFace[]) => {
-    if (!canvasRef.current || !videoRef.current) return;
-
-    const canvas = canvasRef.current;
+    const canvas = overlayCanvasRef.current;
     const video = videoRef.current;
-    const ctx = canvas.getContext('2d');
     
+    if (!canvas || !video) return;
+    
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    // Size canvas to match displayed video size
-    const videoRect = video.getBoundingClientRect();
-    canvas.width = videoRect.width;
-    canvas.height = videoRect.height;
-
-    // Compute scaling from intrinsic video dimensions to displayed size
-    const scaleX = videoRect.width / (video.videoWidth || 1);
-    const scaleY = videoRect.height / (video.videoHeight || 1);
-
+    
+    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Get colors from CSS variables
-    const successColor = getCanvasColor('--success');
-    const primaryColor = getCanvasColor('--primary');
-
-    faces.forEach((face, i) => {
-      const isRecognized = !!face.studentId;
-      const x = face.box.x * scaleX;
-      const y = face.box.y * scaleY;
-      const w = face.box.width * scaleX;
-      const h = face.box.height * scaleY;
-
-      // Border - use primary color for detected faces
-      ctx.strokeStyle = isRecognized ? successColor : primaryColor;
-      ctx.lineWidth = 4;
-      ctx.strokeRect(x, y, w, h);
-
-      // Label background
-      const label = face.studentName || 'Detected';
-      const labelH = 32;
-      ctx.fillStyle = isRecognized ? successColor : primaryColor;
-      ctx.fillRect(x, Math.max(0, y - labelH), Math.max(100, w), labelH);
-
-      // Label text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 15px system-ui';
-      ctx.fillText(label, x + 8, Math.max(20, y - 9));
+    
+    // Draw rectangles around detected faces
+    faces.forEach((face) => {
+      const bbox = face.boundingBox;
+      
+      // Convert relative coordinates to canvas coordinates if needed
+      let x = bbox.x;
+      let y = bbox.y;
+      let width = bbox.width;
+      let height = bbox.height;
+      
+      // If coordinates are relative (0-1 range), convert to absolute
+      if (x <= 1 && y <= 1 && width <= 1 && height <= 1) {
+        x = bbox.x * canvas.width;
+        y = bbox.y * canvas.height;
+        width = bbox.width * canvas.width;
+        height = bbox.height * canvas.height;
+      }
+      
+      // Draw box
+      ctx.strokeStyle = face.studentName ? '#00ff00' : '#ff6b00';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, width, height);
+      
+      // Draw label background
+      if (face.studentName) {
+        const label = face.studentName;
+        ctx.font = 'bold 16px Arial';
+        const textWidth = ctx.measureText(label).width;
+        
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+        ctx.fillRect(x, y - 25, textWidth + 10, 25);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillText(label, x + 5, y - 7);
+      }
+      
+      // Draw confidence
+      if (face.confidence) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(x, y + height, 80, 20);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.fillText(`${(face.confidence * 100).toFixed(0)}%`, x + 5, y + height + 15);
+      }
     });
   };
 
-  const markAttendance = async (studentId: string, status: 'present' | 'absent' | 'late') => {
-    if (!selectedClass) return;
-
-    const { error } = await supabase
-      .from('attendance')
-      .insert({
-        student_id: studentId,
-        class_id: selectedClass,
-        status: status
-      });
-
-    if (!error) {
-      setMarkedAttendance(prev => new Set([...prev, studentId]));
-      const student = students.find(s => s.id === studentId);
+  const markAttendance = async (studentId: string, studentName: string, confidence: number) => {
+    if (markedStudents.current.has(studentId)) return;
+    
+    try {
+      markedStudents.current.add(studentId);
+      
+      const { error } = await supabase
+        .from('attendance')
+        .insert({
+          student_id: studentId,
+          class_id: selectedClass,
+          status: 'present',
+          marked_at: new Date().toISOString(),
+        });
+      
+      if (error) throw error;
+      
+      // Update UI
+      setStudents(prev => prev.map(s => 
+        s.id === studentId ? { ...s, attendance: 'present' } : s
+      ));
+      
       toast({
-        title: "Attendance Marked",
-        description: `${student?.name} marked as ${status}`,
+        title: "✓ Attendance marked",
+        description: `${studentName} - ${(confidence * 100).toFixed(1)}% match`,
+      });
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      markedStudents.current.delete(studentId);
+      toast({
+        title: "Error",
+        description: "Failed to mark attendance",
+        variant: "destructive",
       });
     }
   };
 
   return (
     <Layout>
-      <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Take Attendance</h1>
-          <p className="text-muted-foreground">Real-time face recognition attendance tracking</p>
-        </div>
-
-        {/* Controls */}
-        <Card className="border-border/50 animate-scale-in">
-          <CardContent className="p-6">
-            <div className="space-y-4">
+      <div className="space-y-6">
+        {/* Status Header */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <Select value={selectedClass} onValueChange={setSelectedClass} disabled={isLoadingModel}>
-                    <SelectTrigger className="transition-all duration-200 hover:border-primary/50">
-                      <SelectValue placeholder="Select a class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {classes.map(cls => (
-                        <SelectItem key={cls.id} value={cls.id}>
-                          {cls.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div>
+                  <span className="text-muted-foreground">Detector: </span>
+                  <span className={`font-semibold ${
+                    detectorType === 'native' ? 'text-green-600' :
+                    detectorType === 'mediapipe' ? 'text-blue-600' :
+                    'text-red-600'
+                  }`}>
+                    {detectorType === 'native' ? 'Native' :
+                     detectorType === 'mediapipe' ? 'MediaPipe' :
+                     'Unavailable'}
+                  </span>
                 </div>
-                {!isStreaming ? (
-                  <Button 
-                    onClick={startCamera} 
-                    className="gap-2 hover:scale-105 transition-transform duration-200"
-                    disabled={isLoadingModel || !selectedClass}
-                  >
-                    {isLoadingModel ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="w-4 h-4" />
-                        Start Camera
-                      </>
-                    )}
-                  </Button>
-                ) : (
-                  <Button onClick={stopCamera} variant="destructive" className="gap-2 hover:scale-105 transition-transform duration-200">
-                    <Square className="w-4 h-4" />
-                    Stop Camera
-                  </Button>
-                )}
+                <div>
+                  <span className="text-muted-foreground">Faces: </span>
+                  <span className="font-semibold">{faceCount}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Profiles Loaded: </span>
+                  <span className="font-semibold">{profilesLoaded}</span>
+                </div>
               </div>
-
-              {/* Detection Status Indicators */}
-              {isStreaming && (
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border border-border/50">
-                  <div className="flex items-center gap-2">
-                    {detectorSupported ? (
-                      <Badge variant="default" className="gap-1.5">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Face Detection Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive" className="gap-1.5">
-                        <XCircle className="w-3 h-3" />
-                        Detection Unavailable
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  {detectorSupported && (
-                    <>
-                      <div className="h-4 w-px bg-border" />
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Faces Detected:</span>
-                        <Badge variant="secondary" className="font-mono">
-                          {detectionCount}
-                        </Badge>
-                      </div>
-                      
-                      <div className="h-4 w-px bg-border" />
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Face Database:</span>
-                        <Badge variant="secondary" className="font-mono">
-                          {studentEmbeddings.length} students
-                        </Badge>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Camera Feed and Student List */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Camera Feed */}
-          <Card className="lg:col-span-2 border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.1s" }}>
-            <CardHeader>
-              <CardTitle>Live Camera Feed</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isStreaming && !detectorSupported && (
-                <p className="text-sm text-muted-foreground mb-2">
-                  Face detection not supported in this browser. Use manual marking or try Chrome/Edge.
-                </p>
-              )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Take Attendance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Class Selection */}
+            <div>
+              <label className="text-sm font-medium mb-2 block">Select Class</label>
+              <Select value={selectedClass} onValueChange={setSelectedClass}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Camera Controls */}
+            <div className="flex gap-2">
+              <Button
+                onClick={startCamera}
+                disabled={isStreaming || !selectedClass || loadingStudents}
+                className="flex items-center gap-2"
+              >
+                {loadingStudents ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading profiles...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-4 w-4" />
+                    Start Camera
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={stopCamera}
+                disabled={!isStreaming}
+                variant="destructive"
+                className="flex items-center gap-2"
+              >
+                <Square className="h-4 w-4" />
+                Stop Camera
+              </Button>
+            </div>
+
+            {/* Camera Feed */}
+            {selectedClass && (
               <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
                 <video
                   ref={videoRef}
-                  autoPlay
+                  className="w-full h-full object-cover"
                   playsInline
                   muted
-                  className="w-full h-full object-cover"
                 />
                 <canvas
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  ref={overlayCanvasRef}
+                  className="absolute top-0 left-0 w-full h-full"
                 />
                 {!isStreaming && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <Camera className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">Select a class and start camera to begin</p>
-                    </div>
+                    <p className="text-muted-foreground">Camera not started</p>
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </CardContent>
+        </Card>
 
-          {/* Student Attendance List */}
-          {selectedClass && classStudents.length > 0 && (
-            <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.2s" }}>
-              <CardHeader>
-                <CardTitle>Class Students</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Present: {markedAttendance.size} / {classStudents.length}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                  {classStudents.map((student, index) => {
-                    const isPresent = markedAttendance.has(student.id);
-                    return (
-                      <div
-                        key={student.id}
-                        className={`p-3 rounded-lg border transition-all duration-300 animate-fade-in hover:scale-102`}
-                        style={{ 
-                          animationDelay: `${index * 0.03}s`,
-                          backgroundColor: isPresent ? 'hsl(var(--success) / 0.1)' : 'hsl(var(--muted) / 0.5)',
-                          borderColor: isPresent ? 'hsl(var(--success) / 0.3)' : 'hsl(var(--border))',
-                          color: isPresent ? 'hsl(var(--success-foreground))' : 'hsl(var(--foreground))'
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className={`font-medium ${isPresent ? 'text-success' : ''}`}>
-                              {student.name}
-                            </p>
-                            {student.student_id && (
-                              <p className="text-xs opacity-70">
-                                ID: {student.student_id}
-                              </p>
-                            )}
-                          </div>
-                          {isPresent && (
-                            <div className="w-3 h-3 rounded-full bg-success animate-pulse-glow" />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Attendance Summary */}
-        {markedAttendance.size > 0 && (
-          <Card className="border-success/50 animate-fade-in-up hover:shadow-lg transition-shadow duration-300">
+        {/* Student List */}
+        {selectedClass && students.length > 0 && (
+          <Card>
             <CardHeader>
-              <CardTitle className="text-success">Recently Marked: {markedAttendance.size} students</CardTitle>
+              <CardTitle>Students ({students.length})</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {Array.from(markedAttendance).map((studentId, index) => {
-                  const student = classStudents.find(s => s.id === studentId) || students.find(s => s.id === studentId);
-                  return (
-                    <div 
-                      key={studentId} 
-                      className="p-3 bg-success/10 rounded-lg border border-success/20 animate-scale-in hover:scale-105 transition-transform duration-200"
-                      style={{ animationDelay: `${index * 0.05}s` }}
-                    >
-                      <p className="font-medium text-sm">{student?.name}</p>
+              <div className="space-y-2">
+                {students.map((student) => (
+                  <div
+                    key={student.id}
+                    className="flex items-center justify-between p-3 rounded-lg border"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="font-medium">{student.name}</p>
+                        <p className="text-sm text-muted-foreground">{student.student_id}</p>
+                      </div>
                     </div>
-                  );
-                })}
+                    <div>
+                      {markedStudents.current.has(student.id) ? (
+                        <Badge className="bg-green-500">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Present
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Absent
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
