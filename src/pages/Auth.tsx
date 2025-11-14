@@ -74,15 +74,15 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 animate-fade-in">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <Radar className="w-8 h-8 text-primary" />
+        <div className="flex items-center justify-center gap-2 mb-8 animate-fade-in-up">
+          <Radar className="w-8 h-8 text-primary animate-pulse-glow" />
           <h1 className="text-3xl font-bold text-primary">InSight</h1>
         </div>
 
-        <Card className="border-border/50 bg-card/50 backdrop-blur">
+        <Card className="border-border/50 bg-card/50 backdrop-blur animate-scale-in hover:shadow-xl transition-shadow duration-300">
           <CardHeader>
             <CardTitle>Welcome</CardTitle>
             <CardDescription>Sign in to access the face attendance system</CardDescription>
@@ -118,7 +118,7 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full hover:scale-[1.02] transition-transform duration-200" disabled={isLoading}>
                     {isLoading ? "Loading..." : "Login"}
                   </Button>
                 </form>
@@ -170,7 +170,7 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full hover:scale-[1.02] transition-transform duration-200" disabled={isLoading}>
                     {isLoading ? "Creating account..." : "Sign Up"}
                   </Button>
                 </form>

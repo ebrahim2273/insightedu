@@ -53,9 +53,9 @@ const Layout = ({ children }: LayoutProps) => {
                     key={item.path}
                     to={item.path}
                     className={cn(
-                      "px-4 py-2 rounded-md text-sm font-medium transition-colors",
+                      "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 hover:scale-105",
                       isActive
-                        ? "bg-primary/10 text-primary"
+                        ? "bg-primary/10 text-primary shadow-md"
                         : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                     )}
                   >

@@ -194,19 +194,19 @@ const TakeAttendance = () => {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Take Attendance</h1>
           <p className="text-muted-foreground">Real-time face recognition attendance tracking</p>
         </div>
 
         {/* Controls */}
-        <Card className="border-border/50">
+        <Card className="border-border/50 animate-scale-in">
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <Select value={selectedClass} onValueChange={setSelectedClass}>
-                  <SelectTrigger>
+                  <SelectTrigger className="transition-all duration-200 hover:border-primary/50">
                     <SelectValue placeholder="Select a class" />
                   </SelectTrigger>
                   <SelectContent>
@@ -219,12 +219,12 @@ const TakeAttendance = () => {
                 </Select>
               </div>
               {!isStreaming ? (
-                <Button onClick={startCamera} className="gap-2">
+                <Button onClick={startCamera} className="gap-2 hover:scale-105 transition-transform duration-200">
                   <Camera className="w-4 h-4" />
                   Start Camera
                 </Button>
               ) : (
-                <Button onClick={stopCamera} variant="destructive" className="gap-2">
+                <Button onClick={stopCamera} variant="destructive" className="gap-2 hover:scale-105 transition-transform duration-200">
                   <Square className="w-4 h-4" />
                   Stop Camera
                 </Button>
@@ -234,7 +234,7 @@ const TakeAttendance = () => {
         </Card>
 
         {/* Camera Feed */}
-        <Card className="border-border/50">
+        <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.1s" }}>
           <CardHeader>
             <CardTitle>Live Camera Feed</CardTitle>
           </CardHeader>
@@ -265,16 +265,20 @@ const TakeAttendance = () => {
 
         {/* Attendance Summary */}
         {markedAttendance.size > 0 && (
-          <Card className="border-success/50">
+          <Card className="border-success/50 animate-fade-in-up hover:shadow-lg transition-shadow duration-300">
             <CardHeader>
               <CardTitle className="text-success">Attendance Marked: {markedAttendance.size} students</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {Array.from(markedAttendance).map(studentId => {
+                {Array.from(markedAttendance).map((studentId, index) => {
                   const student = students.find(s => s.id === studentId);
                   return (
-                    <div key={studentId} className="p-3 bg-success/10 rounded-lg border border-success/20">
+                    <div 
+                      key={studentId} 
+                      className="p-3 bg-success/10 rounded-lg border border-success/20 animate-scale-in hover:scale-105 transition-transform duration-200"
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
                       <p className="font-medium text-sm">{student?.name}</p>
                     </div>
                   );
