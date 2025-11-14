@@ -76,12 +76,19 @@ const TakeAttendance = () => {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // Ensure video plays
+        await videoRef.current.play();
         setIsStreaming(true);
+        toast({
+          title: "Camera Started",
+          description: "Face detection is now active",
+        });
       }
     } catch (error) {
+      console.error("Camera error:", error);
       toast({
         title: "Error",
-        description: "Failed to access camera",
+        description: "Failed to access camera. Please allow camera permissions.",
         variant: "destructive",
       });
     }
