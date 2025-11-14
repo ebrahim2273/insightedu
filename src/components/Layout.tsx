@@ -1,5 +1,5 @@
-import { ReactNode, useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { 
@@ -21,13 +21,6 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const { signOut } = useAuth();
-  const [transitioning, setTransitioning] = useState(false);
-
-  useEffect(() => {
-    setTransitioning(true);
-    const t = setTimeout(() => setTransitioning(false), 250);
-    return () => clearTimeout(t);
-  }, [location.pathname]);
   
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -45,29 +38,28 @@ const Layout = ({ children }: LayoutProps) => {
       <div className="animated-grid-bg" aria-hidden="true" />
       
       {/* Navigation Bar */}
-      <nav className="bg-card/80 backdrop-blur-xl border-b border-border/50 relative z-10 animate-slide-in-left">
+      <nav className="bg-card/80 backdrop-blur-xl border-b border-border/50 relative z-10">
         <div className="container mx-auto px-6">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/dashboard" className="flex items-center gap-2 text-xl font-bold text-primary group">
-              <Eye className="w-6 h-6 animate-pulse-glow group-hover:animate-rotate-slow transition-all" />
+              <Eye className="w-6 h-6 group-hover:scale-110 transition-transform" />
               <span className="neon-text">InSight</span>
             </Link>
 
             {/* Navigation Links */}
             <div className="flex items-center gap-1">
-              {navItems.map((item, index) => {
+              {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    style={{ animationDelay: `${index * 0.1}s` }}
                     className={cn(
-                      "px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 hover:scale-105 btn-lightsaber animate-fade-in",
+                      "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200",
                       isActive
-                        ? "bg-primary/10 text-primary shadow-md shadow-primary/20"
+                        ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                     )}
                   >
@@ -79,8 +71,7 @@ const Layout = ({ children }: LayoutProps) => {
                 onClick={signOut}
                 variant="ghost"
                 size="sm"
-                className="ml-2 text-destructive hover:text-destructive hover:bg-destructive/10 btn-lightsaber animate-fade-in"
-                style={{ animationDelay: `${navItems.length * 0.1}s` }}
+                className="ml-2 text-destructive hover:text-destructive hover:bg-destructive/10"
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Logout
@@ -90,20 +81,9 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
       </nav>
 
-      {/* Page transition overlay */}
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none fixed inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-300 z-20",
-          transitioning ? "opacity-100" : "opacity-0"
-        )}
-      />
-
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8 relative z-10">
-        <div key={location.pathname} className="animate-fade-in-up">
-          {children}
-        </div>
+        {children}
       </main>
     </div>
   );
