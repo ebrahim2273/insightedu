@@ -8,6 +8,7 @@ import { Camera, Square, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { generateFaceEmbedding, findBestMatch } from "@/lib/faceEmbedding";
+import { FaceDetector as MPFaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 
 interface DetectedFace {
   box: { x: number; y: number; width: number; height: number };
@@ -22,6 +23,8 @@ const TakeAttendance = () => {
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const detectionRafRef = useRef<number | null>(null);
   const faceDetectorRef = useRef<any | null>(null);
+  const mpFaceDetectorRef = useRef<any | null>(null);
+  const visionRef = useRef<any | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [classes, setClasses] = useState<any[]>([]);
@@ -197,7 +200,7 @@ const TakeAttendance = () => {
     }
   };
 
-  const startFaceDetection = () => {
+  const startFaceDetection = async () => {
     // Clear existing timers
     if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     if (detectionRafRef.current) cancelAnimationFrame(detectionRafRef.current);
@@ -234,33 +237,93 @@ const TakeAttendance = () => {
       ctx.fillText(msg, (canvas.width - textW) / 2, Math.max(24, y - 12));
     };
 
-    // Prefer the native FaceDetector API. If unavailable, draw a guide frame but do not mock detections.
+    // Prefer the native FaceDetector API. If unavailable, initialize MediaPipe fallback.
     const FaceDetectorCtor = (window as any).FaceDetector;
     if (!FaceDetectorCtor) {
-      setDetectorSupported(false);
-      // Draw guide frame periodically while streaming
-      detectionIntervalRef.current = setInterval(() => {
-        if (!isStreaming) return;
-        drawGuideFrame();
-      }, 300);
-      toast({
-        title: "Face detection unavailable",
-        description: "Your browser doesn't support face detection. Use manual marking or try Chrome/Edge.",
-      });
-      return;
+      try {
+        if (!visionRef.current) {
+          visionRef.current = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+          );
+        }
+        mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
+          baseOptions: {
+            modelAssetPath:
+              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm/face_detection_short_range.tflite",
+          },
+          runningMode: "VIDEO",
+        });
+        setDetectorSupported(true);
+      } catch (e) {
+        setDetectorSupported(false);
+        // Draw guide frame periodically while streaming
+        detectionIntervalRef.current = setInterval(() => {
+          if (!isStreaming) return;
+          drawGuideFrame();
+        }, 300);
+        toast({
+          title: "Face detection unavailable",
+          description:
+            "This browser lacks native detection and the fallback failed to load. Use manual marking or try Chrome/Edge.",
+        });
+        return;
+      }
+    } else {
+      setDetectorSupported(true);
+      try {
+        faceDetectorRef.current = new FaceDetectorCtor({ fastMode: true });
+      } catch (e) {
+        // If native fails, try fallback once
+        try {
+          if (!visionRef.current) {
+            visionRef.current = await FilesetResolver.forVisionTasks(
+              "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+            );
+          }
+          mpFaceDetectorRef.current = await MPFaceDetector.createFromOptions(visionRef.current, {
+            baseOptions: {
+              modelAssetPath:
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm/face_detection_short_range.tflite",
+            },
+            runningMode: "VIDEO",
+          });
+          setDetectorSupported(true);
+        } catch (err) {
+          setDetectorSupported(false);
+          toast({
+            title: "Face detection error",
+            description: "Could not initialize any face detector. Try refreshing the page.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
     }
-
-    setDetectorSupported(true);
-    try {
-      faceDetectorRef.current = new FaceDetectorCtor({ fastMode: true });
-    } catch (e) {
-      toast({
-        title: "Face detection error",
-        description: "Could not initialize face detector. Try refreshing the page.",
-        variant: "destructive"
-      });
-      return;
-    }
+    // Unified face detection (native or MediaPipe)
+    const getFaceBoxes = async (videoEl: HTMLVideoElement) => {
+      // Native FaceDetector
+      if (faceDetectorRef.current) {
+        const faces = await faceDetectorRef.current.detect(videoEl);
+        return (faces || []).map((f: any) => ({
+          x: f.boundingBox?.x ?? 0,
+          y: f.boundingBox?.y ?? 0,
+          width: f.boundingBox?.width ?? 0,
+          height: f.boundingBox?.height ?? 0,
+        }));
+      }
+      // MediaPipe fallback
+      if (mpFaceDetectorRef.current) {
+        const result = mpFaceDetectorRef.current.detectForVideo(videoEl, performance.now());
+        const dets = result?.detections || [];
+        return dets.map((d: any) => ({
+          x: d.boundingBox?.originX ?? 0,
+          y: d.boundingBox?.originY ?? 0,
+          width: d.boundingBox?.width ?? 0,
+          height: d.boundingBox?.height ?? 0,
+        }));
+      }
+      return [] as Array<{ x: number; y: number; width: number; height: number }>;
+    };
 
     const detect = async () => {
       if (!isStreaming || !videoRef.current) return;
@@ -271,57 +334,38 @@ const TakeAttendance = () => {
       }
 
       try {
-        // @ts-ignore - FaceDetector types not available
-        const faces = await faceDetectorRef.current.detect(video);
-        
-        // Update detection count
-        setDetectionCount(faces.length);
-        
-        // Process each detected face for recognition
+        const boxes = await getFaceBoxes(video);
+        setDetectionCount(boxes.length);
+
         const mappedFaces: DetectedFace[] = [];
-        
-        for (const f of faces || []) {
-          const faceBox = {
-            x: f.boundingBox?.x ?? 0,
-            y: f.boundingBox?.y ?? 0,
-            width: f.boundingBox?.width ?? 0,
-            height: f.boundingBox?.height ?? 0,
-          };
-          
+        for (const faceBox of boxes) {
           let recognizedStudent: { studentId: string; studentName: string; confidence: number } | null = null;
-          
-          // Try to recognize the face if we have student embeddings
-          if (studentEmbeddings.length > 0 && canvasRef.current) {
+
+          if (studentEmbeddings.length > 0) {
             try {
-              // Extract face region from video
+              const sx = Math.max(0, Math.floor(faceBox.x));
+              const sy = Math.max(0, Math.floor(faceBox.y));
+              const sw = Math.max(1, Math.floor(faceBox.width));
+              const sh = Math.max(1, Math.floor(faceBox.height));
+
               const tempCanvas = document.createElement('canvas');
-              tempCanvas.width = faceBox.width;
-              tempCanvas.height = faceBox.height;
+              tempCanvas.width = sw;
+              tempCanvas.height = sh;
               const tempCtx = tempCanvas.getContext('2d');
-              
               if (tempCtx) {
-                tempCtx.drawImage(
-                  video,
-                  faceBox.x, faceBox.y, faceBox.width, faceBox.height,
-                  0, 0, faceBox.width, faceBox.height
-                );
-                
+                tempCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
                 const faceImageData = tempCanvas.toDataURL('image/jpeg', 0.8);
                 const faceEmbedding = await generateFaceEmbedding(faceImageData);
-                
-                // Find best match
                 recognizedStudent = findBestMatch(faceEmbedding, studentEmbeddings, 0.5);
-                
-                // Auto-mark attendance for recognized students
                 if (recognizedStudent && !markedAttendance.has(recognizedStudent.studentId)) {
                   await markAttendance(recognizedStudent.studentId, 'present');
                 }
               }
-            } catch (err) {
-              // Face recognition failed for this face, continue with detection only
+            } catch {
+              // ignore recognition errors per frame
             }
           }
-          
+
           mappedFaces.push({
             box: faceBox,
             studentId: recognizedStudent?.studentId,
@@ -329,11 +373,11 @@ const TakeAttendance = () => {
             confidence: recognizedStudent?.confidence,
           });
         }
-        
+
         setDetectedFaces(mappedFaces);
         drawDetections(mappedFaces);
-      } catch (err) {
-        // Silent fail - detection errors are common
+      } catch {
+        // ignore detection errors
       }
 
       detectionRafRef.current = requestAnimationFrame(detect);
