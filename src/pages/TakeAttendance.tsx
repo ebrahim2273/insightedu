@@ -140,8 +140,6 @@ const TakeAttendance = () => {
   };
 
   const startFaceDetection = () => {
-    console.log("Starting face detection");
-    
     // Clear existing timers
     if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     if (detectionRafRef.current) cancelAnimationFrame(detectionRafRef.current);
@@ -163,12 +161,15 @@ const TakeAttendance = () => {
       const h = canvas.height * 0.45;
       const x = (canvas.width - w) / 2;
       const y = (canvas.height - h) / 2;
-      ctx.strokeStyle = 'hsl(var(--accent))';
+      
+      // Get accent color from CSS
+      const accentColor = getCanvasColor('--accent');
+      ctx.strokeStyle = accentColor;
       ctx.lineWidth = 3;
       ctx.setLineDash([8, 8]);
       ctx.strokeRect(x, y, w, h);
       ctx.setLineDash([]);
-      ctx.fillStyle = 'hsl(var(--muted-foreground))';
+      ctx.fillStyle = '#ffffff';
       ctx.font = '600 14px system-ui';
       const msg = 'Align your face within the frame';
       const textW = ctx.measureText(msg).width;
@@ -178,7 +179,6 @@ const TakeAttendance = () => {
     // Prefer the native FaceDetector API. If unavailable, draw a guide frame but do not mock detections.
     const FaceDetectorCtor = (window as any).FaceDetector;
     if (!FaceDetectorCtor) {
-      console.warn("FaceDetector API not supported in this browser");
       setDetectorSupported(false);
       // Draw guide frame periodically while streaming
       detectionIntervalRef.current = setInterval(() => {
@@ -187,7 +187,7 @@ const TakeAttendance = () => {
       }, 300);
       toast({
         title: "Face detection unavailable",
-        description: "Your browser doesn't support native face detection. Use manual marking or try Chrome/Edge.",
+        description: "Your browser doesn't support face detection. Use manual marking or try Chrome/Edge.",
       });
       return;
     }
@@ -196,7 +196,11 @@ const TakeAttendance = () => {
     try {
       faceDetectorRef.current = new FaceDetectorCtor({ fastMode: true });
     } catch (e) {
-      console.error("Failed to initialize FaceDetector", e);
+      toast({
+        title: "Face detection error",
+        description: "Could not initialize face detector. Try refreshing the page.",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -222,7 +226,7 @@ const TakeAttendance = () => {
         setDetectedFaces(mapped);
         drawDetections(mapped);
       } catch (err) {
-        console.error("Face detection error", err);
+        // Silent fail - detection errors are common
       }
 
       detectionRafRef.current = requestAnimationFrame(detect);
@@ -231,30 +235,25 @@ const TakeAttendance = () => {
     detectionRafRef.current = requestAnimationFrame(detect);
   };
 
+  const getCanvasColor = (cssVar: string): string => {
+    const computedStyle = getComputedStyle(document.documentElement);
+    const hslValue = computedStyle.getPropertyValue(cssVar).trim();
+    return hslValue ? `hsl(${hslValue})` : '#10b981';
+  };
+
   const drawDetections = (faces: DetectedFace[]) => {
-    console.log("Drawing", faces.length, "face boxes");
-    
-    if (!canvasRef.current || !videoRef.current) {
-      console.log("Canvas or video ref missing");
-      return;
-    }
+    if (!canvasRef.current || !videoRef.current) return;
 
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const ctx = canvas.getContext('2d');
     
-    if (!ctx) {
-      console.log("No canvas context");
-      return;
-    }
+    if (!ctx) return;
 
     // Size canvas to match displayed video size
     const videoRect = video.getBoundingClientRect();
     canvas.width = videoRect.width;
     canvas.height = videoRect.height;
-    
-    console.log("Canvas size:", canvas.width, "x", canvas.height);
-    console.log("Video size:", video.videoWidth, "x", video.videoHeight);
 
     // Compute scaling from intrinsic video dimensions to displayed size
     const scaleX = videoRect.width / (video.videoWidth || 1);
@@ -262,29 +261,32 @@ const TakeAttendance = () => {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Get colors from CSS variables
+    const successColor = getCanvasColor('--success');
+    const primaryColor = getCanvasColor('--primary');
+
     faces.forEach((face, i) => {
-      console.log(`Drawing face ${i}:`, face);
       const isRecognized = !!face.studentId;
       const x = face.box.x * scaleX;
       const y = face.box.y * scaleY;
       const w = face.box.width * scaleX;
       const h = face.box.height * scaleY;
 
-      // Border
-      ctx.strokeStyle = isRecognized ? 'hsl(var(--success))' : 'hsl(var(--destructive))';
+      // Border - use primary color for detected faces
+      ctx.strokeStyle = isRecognized ? successColor : primaryColor;
       ctx.lineWidth = 4;
       ctx.strokeRect(x, y, w, h);
 
       // Label background
-      const label = face.studentName || 'Unknown';
-      const labelH = 30;
-      ctx.fillStyle = isRecognized ? 'hsl(var(--success))' : 'hsl(var(--destructive))';
-      ctx.fillRect(x, Math.max(0, y - labelH), Math.max(80, w), labelH);
+      const label = face.studentName || 'Detected';
+      const labelH = 32;
+      ctx.fillStyle = isRecognized ? successColor : primaryColor;
+      ctx.fillRect(x, Math.max(0, y - labelH), Math.max(100, w), labelH);
 
       // Label text
-      ctx.fillStyle = isRecognized ? 'hsl(var(--success-foreground))' : 'hsl(var(--destructive-foreground))';
-      ctx.font = '700 16px system-ui';
-      ctx.fillText(label, x + 8, Math.max(18, y - 8));
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '600 15px system-ui';
+      ctx.fillText(label, x + 8, Math.max(20, y - 9));
     });
   };
 
