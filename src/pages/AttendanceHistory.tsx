@@ -21,8 +21,8 @@ const AttendanceHistory = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [rows, setRows] = useState<AttendanceRow[]>([]);
 
-  const [classId, setClassId] = useState<string>("");
-  const [studentId, setStudentId] = useState<string>("");
+  const [classId, setClassId] = useState<string>("all");
+  const [studentId, setStudentId] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const { toast } = useToast();
@@ -48,8 +48,8 @@ const AttendanceHistory = () => {
 
   const fetchData = async () => {
     let query = supabase.from('attendance').select('*').order('marked_at', { ascending: false });
-    if (classId) query = query.eq('class_id', classId);
-    if (studentId) query = query.eq('student_id', studentId);
+    if (classId && classId !== 'all') query = query.eq('class_id', classId);
+    if (studentId && studentId !== 'all') query = query.eq('student_id', studentId);
     if (startDate) query = query.gte('marked_at', new Date(startDate).toISOString());
     if (endDate) {
       const end = new Date(endDate);
@@ -114,7 +114,7 @@ const AttendanceHistory = () => {
               <Select value={classId} onValueChange={setClassId}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="All classes" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {classes.map((c: any) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
@@ -126,7 +126,7 @@ const AttendanceHistory = () => {
               <Select value={studentId} onValueChange={setStudentId}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="All students" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {students.map((s: any) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
