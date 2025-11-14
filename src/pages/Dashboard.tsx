@@ -63,9 +63,9 @@ const Dashboard = () => {
         {/* Welcome Section */}
         <div className="card-glow bg-card/80 backdrop-blur-sm rounded-lg p-8 border-2 border-primary/20 relative overflow-hidden animate-fade-in-up hover:scale-[1.01] transition-transform duration-300">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-accent/10 to-transparent opacity-60" />
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl animate-pulse-glow" />
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
           <div className="relative z-10">
-            <h1 className="text-4xl font-bold neon-text mb-3 float-animation">Welcome to InSight Dashboard</h1>
+            <h1 className="text-4xl font-bold neon-text mb-3">Welcome to InSight Dashboard</h1>
             <p className="text-muted-foreground text-lg">AI-Powered Face Recognition Attendance System</p>
           </div>
         </div>
@@ -91,9 +91,9 @@ const Dashboard = () => {
 
         {/* Status Overview */}
         <Card className="card-glow border-2 border-primary/20 overflow-hidden animate-slide-up bg-card/50 backdrop-blur-sm">
-          <CardHeader className="bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 bg-[length:200%_100%] animate-shimmer">
+          <CardHeader className="bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10">
             <CardTitle className="flex items-center gap-2 text-xl">
-              <Camera className="w-5 h-5 animate-pulse-glow" />
+              <Camera className="w-5 h-5" />
               <span className="neon-text">Today's Attendance Status</span>
             </CardTitle>
           </CardHeader>
@@ -106,7 +106,7 @@ const Dashboard = () => {
                     <p className="text-sm text-success/80 font-medium uppercase tracking-wide">Present</p>
                     <p className="text-4xl font-bold text-success neon-text mt-2">{stats.presentToday}</p>
                   </div>
-                  <UserCheck className="w-12 h-12 text-success opacity-50 float-animation" />
+                  <UserCheck className="w-12 h-12 text-success opacity-50" />
                 </div>
               </div>
 
@@ -117,7 +117,7 @@ const Dashboard = () => {
                     <p className="text-sm text-destructive/80 font-medium uppercase tracking-wide">Absent</p>
                     <p className="text-4xl font-bold text-destructive neon-text mt-2">{stats.absentToday}</p>
                   </div>
-                  <Users className="w-12 h-12 text-destructive opacity-50 float-animation" style={{ animationDelay: "0.5s" }} />
+                  <Users className="w-12 h-12 text-destructive opacity-50" />
                 </div>
               </div>
 
@@ -128,7 +128,7 @@ const Dashboard = () => {
                     <p className="text-sm text-yellow-500/80 font-medium uppercase tracking-wide">Late</p>
                     <p className="text-4xl font-bold text-yellow-500 neon-text mt-2">{stats.lateToday}</p>
                   </div>
-                  <TrendingUp className="w-12 h-12 text-yellow-500 opacity-50 float-animation" style={{ animationDelay: "1s" }} />
+                  <TrendingUp className="w-12 h-12 text-yellow-500 opacity-50" />
                 </div>
               </div>
             </div>
