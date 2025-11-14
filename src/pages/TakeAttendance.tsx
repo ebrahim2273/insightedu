@@ -18,8 +18,8 @@ interface StudentDescriptors {
 }
 
 const SIMILARITY_THRESHOLD = 0.6; // Standard face-api.js threshold
-const MIN_CONFIDENCE_PERCENTAGE = 75; // Require at least 75% match
-const REQUIRED_CONSECUTIVE_MATCHES = 2; // Need 2 consecutive matches to confirm
+const MIN_CONFIDENCE_PERCENTAGE = 70; // Require at least 70% match
+const REQUIRED_CONSECUTIVE_MATCHES = 3; // Need 3 consecutive matches to confirm
 
 const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -27,7 +27,7 @@ const TakeAttendance = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const markedStudents = useRef<Set<string>>(new Set());
   const lastProcessTime = useRef<number>(0);
-  const pendingMatches = useRef<Map<string, { count: number; confidence: number; name: string }>>(new Map());
+  const pendingMatches = useRef<Map<string, { count: number; sumConfidence: number; name: string }>>(new Map());
   
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string>("");
@@ -274,21 +274,30 @@ const TakeAttendance = () => {
               currentDetectedIds.add(match.studentId);
               
               // Get or initialize pending match data
-              const pending = pendingMatches.current.get(match.studentId) || { count: 0, confidence: 0, name: match.studentName };
+              const pending = pendingMatches.current.get(match.studentId) || { count: 0, sumConfidence: 0, name: match.studentName };
               
-              // Increment count and update average confidence
+              // Increment count and accumulate confidence
               pending.count += 1;
-              pending.confidence = (pending.confidence + match.confidence) / 2;
+              pending.sumConfidence += match.confidence;
               pending.name = match.studentName;
               
               pendingMatches.current.set(match.studentId, pending);
               
-              console.log(`Pending match: ${match.studentName} - ${pending.count}/${REQUIRED_CONSECUTIVE_MATCHES} (${match.confidence.toFixed(1)}%)`);
+              const avgConfidence = pending.sumConfidence / pending.count;
               
-              // If we have enough consecutive matches, mark attendance
-              if (pending.count >= REQUIRED_CONSECUTIVE_MATCHES) {
-                console.log(`✓ Confirmed match: ${match.studentName} (${pending.confidence.toFixed(1)}%)`);
-                await markAttendance(match.studentId, match.studentName, pending.confidence);
+              // Update per-student confidence display
+              setStudentConfidenceScores((prev) => {
+                const m = new Map(prev);
+                m.set(match.studentId, avgConfidence);
+                return m;
+              });
+              
+              console.log(`Pending match: ${match.studentName} - ${pending.count}/${REQUIRED_CONSECUTIVE_MATCHES} (${avgConfidence.toFixed(1)}%)`);
+              
+              // If we have enough consecutive matches and strong average confidence, mark attendance
+              if (pending.count >= REQUIRED_CONSECUTIVE_MATCHES && avgConfidence >= MIN_CONFIDENCE_PERCENTAGE) {
+                console.log(`✓ Confirmed match: ${match.studentName} (${avgConfidence.toFixed(1)}%)`);
+                await markAttendance(match.studentId, match.studentName, avgConfidence);
                 pendingMatches.current.delete(match.studentId);
               }
             }
