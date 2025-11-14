@@ -17,6 +17,7 @@ interface DetectedFace {
 const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [classes, setClasses] = useState<any[]>([]);
@@ -28,16 +29,14 @@ const TakeAttendance = () => {
   useEffect(() => {
     fetchClasses();
     fetchStudents();
-  }, []);
-
-  useEffect(() => {
-    if (isStreaming) {
-      startFaceDetection();
-    }
+    
     return () => {
       stopCamera();
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
     };
-  }, [isStreaming]);
+  }, []);
 
   const fetchClasses = async () => {
     const { data } = await supabase
@@ -76,9 +75,11 @@ const TakeAttendance = () => {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        // Ensure video plays
-        await videoRef.current.play();
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play();
+        };
         setIsStreaming(true);
+        startFaceDetection();
         toast({
           title: "Camera Started",
           description: "Face detection is now active",
@@ -95,24 +96,47 @@ const TakeAttendance = () => {
   };
 
   const stopCamera = () => {
+    // Stop detection interval
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
+
+    // Stop camera stream
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
+    
     setIsStreaming(false);
+    setDetectedFaces([]);
+    
+    // Clear canvas
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
   };
 
   const startFaceDetection = () => {
+    // Clear any existing interval
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+    }
+
     // Simulated face detection (in real implementation, use @huggingface/transformers)
-    const interval = setInterval(() => {
-      if (!isStreaming || !videoRef.current) return;
+    detectionIntervalRef.current = setInterval(() => {
+      if (!isStreaming || !videoRef.current || videoRef.current.readyState !== 4) return;
 
       // Simulate detecting faces with mock data
       const mockFaces: DetectedFace[] = [];
       
-      // Randomly detect some students
-      students.slice(0, Math.floor(Math.random() * 3) + 1).forEach((student, i) => {
+      // Randomly detect some students (simulate real detection)
+      const numFaces = Math.floor(Math.random() * 2); // 0 or 1 face
+      students.slice(0, numFaces).forEach((student, i) => {
         mockFaces.push({
           box: {
             x: 100 + i * 200,
@@ -129,15 +153,13 @@ const TakeAttendance = () => {
       setDetectedFaces(mockFaces);
       drawDetections(mockFaces);
       
-      // Auto-mark attendance
+      // Auto-mark attendance only for newly detected students
       mockFaces.forEach(face => {
         if (face.studentId && !markedAttendance.has(face.studentId)) {
           markAttendance(face.studentId, 'present');
         }
       });
-    }, 1000);
-
-    return () => clearInterval(interval);
+    }, 3000); // Check every 3 seconds
   };
 
   const drawDetections = (faces: DetectedFace[]) => {
