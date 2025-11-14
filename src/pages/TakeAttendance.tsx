@@ -15,17 +15,29 @@ interface DetectedFace {
   studentId?: string;
   studentName?: string;
   confidence?: number;
+  faceId?: string; // For tracking across frames
 }
 
-const SIMILARITY_THRESHOLD = 0.65;
+interface SmoothedBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const SIMILARITY_THRESHOLD = 0.60; // Lowered for better matching
+const BOX_SMOOTHING_FACTOR = 0.3; // Lower = smoother, higher = more responsive
 
 const TakeAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const detectionRafRef = useRef<number | null>(null);
-const detectorRef = useRef<IDetector | null>(null);
+  const detectorRef = useRef<IDetector | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const markedStudents = useRef<Set<string>>(new Set());
+  const smoothedBoxes = useRef<Map<string, SmoothedBox>>(new Map());
+  const lastProcessTime = useRef<Map<string, number>>(new Map());
+  const faceIdCounter = useRef(0);
   
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string>("");
@@ -250,15 +262,53 @@ const detectorRef = useRef<IDetector | null>(null);
       try {
         const now = performance.now();
         const dets = await detectorRef.current!.detect(video, now);
-        const newFaces: DetectedFace[] = dets.map(d => ({
-          boundingBox: { x: d.box.x, y: d.box.y, width: d.box.width, height: d.box.height },
-          confidence: d.score,
-        }));
+        
+        // Assign face IDs based on proximity to previous detections
+        const newFaces: DetectedFace[] = dets.map(d => {
+          const box = { x: d.box.x, y: d.box.y, width: d.box.width, height: d.box.height };
+          
+          // Find closest previous face within reasonable distance
+          let closestId: string | undefined;
+          let minDist = Infinity;
+          
+          detectedFaces.forEach(prevFace => {
+            if (prevFace.faceId) {
+              const dist = Math.hypot(
+                box.x - prevFace.boundingBox.x,
+                box.y - prevFace.boundingBox.y
+              );
+              if (dist < minDist && dist < 0.15) { // Within 15% distance
+                minDist = dist;
+                closestId = prevFace.faceId;
+              }
+            }
+          });
+          
+          // Assign new ID if no close match found
+          if (!closestId) {
+            closestId = `face_${faceIdCounter.current++}`;
+          }
+          
+          return {
+            boundingBox: box,
+            confidence: d.score,
+            faceId: closestId,
+          };
+        });
+        
         setDetectedFaces(newFaces);
         setFaceCount(newFaces.length);
         drawDetections(newFaces);
+        
+        // Process faces for recognition (throttled per face)
         for (const face of newFaces) {
-          await processFaceForRecognition(face, video);
+          if (face.faceId) {
+            const lastTime = lastProcessTime.current.get(face.faceId) || 0;
+            if (now - lastTime > 500) { // Process each face max every 500ms
+              lastProcessTime.current.set(face.faceId, now);
+              processFaceForRecognition(face, video);
+            }
+          }
         }
       } catch (err) {
         console.error('Detection error:', err);
@@ -312,26 +362,37 @@ const detectorRef = useRef<IDetector | null>(null);
       // Generate embedding for detected face
       const faceEmbedding = await generateFaceEmbedding(imageData);
       
-      // Find best match across ALL student embeddings
+      // Find best match using AVERAGE similarity across all student embeddings
       let bestMatch: { studentId: string; studentName: string; confidence: number } | null = null;
-      let highestSimilarity = SIMILARITY_THRESHOLD;
+      let highestAvgSimilarity = SIMILARITY_THRESHOLD;
       
       for (const student of studentEmbeddings) {
         const embeddings = student.embeddings || [student.embedding];
+        const validEmbeddings = embeddings.filter(e => e.length > 0);
         
-        for (const embedding of embeddings) {
-          if (embedding.length === 0) continue;
-          
+        if (validEmbeddings.length === 0) continue;
+        
+        // Calculate average similarity across all embeddings for this student
+        let totalSimilarity = 0;
+        let maxSimilarity = 0;
+        
+        for (const embedding of validEmbeddings) {
           const similarity = cosineSimilarity(faceEmbedding, embedding);
-          
-          if (similarity > highestSimilarity) {
-            highestSimilarity = similarity;
-            bestMatch = {
-              studentId: student.studentId,
-              studentName: student.studentName,
-              confidence: similarity,
-            };
-          }
+          totalSimilarity += similarity;
+          maxSimilarity = Math.max(maxSimilarity, similarity);
+        }
+        
+        // Use weighted average: 70% max similarity + 30% average
+        const avgSimilarity = totalSimilarity / validEmbeddings.length;
+        const weightedSimilarity = maxSimilarity * 0.7 + avgSimilarity * 0.3;
+        
+        if (weightedSimilarity > highestAvgSimilarity) {
+          highestAvgSimilarity = weightedSimilarity;
+          bestMatch = {
+            studentId: student.studentId,
+            studentName: student.studentName,
+            confidence: weightedSimilarity,
+          };
         }
       }
       
@@ -365,49 +426,106 @@ const detectorRef = useRef<IDetector | null>(null);
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw rectangles around detected faces
+    // Draw rectangles around detected faces with smoothing
     faces.forEach((face) => {
       const bbox = face.boundingBox;
       
       // Convert relative coordinates to canvas coordinates if needed
-      let x = bbox.x;
-      let y = bbox.y;
-      let width = bbox.width;
-      let height = bbox.height;
+      let rawX = bbox.x;
+      let rawY = bbox.y;
+      let rawWidth = bbox.width;
+      let rawHeight = bbox.height;
       
       // If coordinates are relative (0-1 range), convert to absolute
-      if (x <= 1 && y <= 1 && width <= 1 && height <= 1) {
-        x = bbox.x * canvas.width;
-        y = bbox.y * canvas.height;
-        width = bbox.width * canvas.width;
-        height = bbox.height * canvas.height;
+      if (rawX <= 1 && rawY <= 1 && rawWidth <= 1 && rawHeight <= 1) {
+        rawX = bbox.x * canvas.width;
+        rawY = bbox.y * canvas.height;
+        rawWidth = bbox.width * canvas.width;
+        rawHeight = bbox.height * canvas.height;
       }
       
-      // Draw box
-      ctx.strokeStyle = face.studentName ? '#00ff00' : '#ff6b00';
+      // Apply smoothing if face has consistent ID
+      let x = rawX, y = rawY, width = rawWidth, height = rawHeight;
+      if (face.faceId) {
+        const prevBox = smoothedBoxes.current.get(face.faceId);
+        if (prevBox) {
+          // Exponential moving average for smooth tracking
+          x = prevBox.x + (rawX - prevBox.x) * BOX_SMOOTHING_FACTOR;
+          y = prevBox.y + (rawY - prevBox.y) * BOX_SMOOTHING_FACTOR;
+          width = prevBox.width + (rawWidth - prevBox.width) * BOX_SMOOTHING_FACTOR;
+          height = prevBox.height + (rawHeight - prevBox.height) * BOX_SMOOTHING_FACTOR;
+        }
+        smoothedBoxes.current.set(face.faceId, { x, y, width, height });
+      }
+      
+      // Color coding: Green for recognized, Red for unrecognized
+      const isRecognized = !!face.studentName;
+      const boxColor = isRecognized ? '#10b981' : '#ef4444'; // green-500 : red-500
+      const labelBg = isRecognized ? 'rgba(16, 185, 129, 0.9)' : 'rgba(239, 68, 68, 0.9)';
+      
+      // Draw main box with subtle shadow
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = boxColor;
       ctx.lineWidth = 3;
       ctx.strokeRect(x, y, width, height);
+      ctx.shadowBlur = 0;
       
-      // Draw label background
+      // Draw corner accents for a "sticky" feel
+      const cornerLen = 20;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = boxColor;
+      
+      // Top-left corner
+      ctx.beginPath();
+      ctx.moveTo(x, y + cornerLen);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x + cornerLen, y);
+      ctx.stroke();
+      
+      // Top-right corner
+      ctx.beginPath();
+      ctx.moveTo(x + width - cornerLen, y);
+      ctx.lineTo(x + width, y);
+      ctx.lineTo(x + width, y + cornerLen);
+      ctx.stroke();
+      
+      // Bottom-left corner
+      ctx.beginPath();
+      ctx.moveTo(x, y + height - cornerLen);
+      ctx.lineTo(x, y + height);
+      ctx.lineTo(x + cornerLen, y + height);
+      ctx.stroke();
+      
+      // Bottom-right corner
+      ctx.beginPath();
+      ctx.moveTo(x + width - cornerLen, y + height);
+      ctx.lineTo(x + width, y + height);
+      ctx.lineTo(x + width, y + height - cornerLen);
+      ctx.stroke();
+      
+      // Draw label
       if (face.studentName) {
         const label = face.studentName;
-        ctx.font = 'bold 16px Arial';
+        ctx.font = 'bold 14px system-ui';
         const textWidth = ctx.measureText(label).width;
         
-        ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
-        ctx.fillRect(x, y - 25, textWidth + 10, 25);
+        ctx.fillStyle = labelBg;
+        ctx.fillRect(x - 2, y - 28, textWidth + 14, 26);
         
-        ctx.fillStyle = '#000';
-        ctx.fillText(label, x + 5, y - 7);
-      }
-      
-      // Draw confidence
-      if (face.confidence) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(x, y + height, 80, 20);
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px Arial';
-        ctx.fillText(`${(face.confidence * 100).toFixed(0)}%`, x + 5, y + height + 15);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, x + 5, y - 9);
+      } else {
+        // Show "Unknown" label for unrecognized faces
+        const label = 'Unknown';
+        ctx.font = '600 13px system-ui';
+        const textWidth = ctx.measureText(label).width;
+        
+        ctx.fillStyle = labelBg;
+        ctx.fillRect(x - 2, y - 26, textWidth + 14, 24);
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, x + 5, y - 8);
       }
     });
   };
