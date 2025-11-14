@@ -10,6 +10,7 @@ import TakeAttendance from "./pages/TakeAttendance";
 import Analytics from "./pages/Analytics";
 import ClassManagement from "./pages/ClassManagement";
 import AddStudent from "./pages/AddStudent";
+import AttendanceHistory from "./pages/AttendanceHistory";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,7 @@ const AppRoutes = () => {
       <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
       <Route path="/classes" element={<ProtectedRoute><ClassManagement /></ProtectedRoute>} />
       <Route path="/add-student" element={<ProtectedRoute><AddStudent /></ProtectedRoute>} />
+      <Route path="/history" element={<ProtectedRoute><AttendanceHistory /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
