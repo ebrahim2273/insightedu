@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Camera, Trash2, Check, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { generateFaceEmbedding } from "@/lib/faceEmbedding";
+import { generateFaceEmbedding, initFaceModel } from "@/lib/faceEmbedding";
 
 const AddStudent = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -20,6 +20,7 @@ const AddStudent = () => {
   const [classes, setClasses] = useState<any[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [modelLoading, setModelLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     studentId: "",
@@ -31,10 +32,22 @@ const AddStudent = () => {
 
   useEffect(() => {
     fetchClasses();
+    preloadModel();
     return () => {
       stopCamera();
     };
   }, []);
+
+  const preloadModel = async () => {
+    try {
+      setModelLoading(true);
+      await initFaceModel();
+      setModelLoading(false);
+    } catch (error) {
+      console.error('Model preload failed:', error);
+      setModelLoading(false);
+    }
+  };
 
   const fetchClasses = async () => {
     const { data } = await supabase

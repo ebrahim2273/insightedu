@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Users as UsersIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Edit, Trash2, Users as UsersIcon, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -15,6 +16,9 @@ const ClassManagement = () => {
   const [classes, setClasses] = useState<any[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<any>(null);
+  const [viewingStudents, setViewingStudents] = useState<any>(null);
+  const [studentsDialogOpen, setStudentsDialogOpen] = useState(false);
+  const [classStudents, setClassStudents] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -31,7 +35,10 @@ const ClassManagement = () => {
   const fetchClasses = async () => {
     const { data, error } = await supabase
       .from('classes')
-      .select('*')
+      .select(`
+        *,
+        students:students(count)
+      `)
       .order('name', { ascending: true });
 
     if (error) {
@@ -40,6 +47,20 @@ const ClassManagement = () => {
       return;
     }
     setClasses(data || []);
+  };
+
+  const fetchStudentsForClass = async (classId: string) => {
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .eq('class_id', classId)
+      .order('name');
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    setClassStudents(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,7 +118,7 @@ const ClassManagement = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this class?")) {
+    if (confirm("Are you sure you want to delete this class? Students in this class will not be deleted.")) {
       const { error } = await supabase
         .from('classes')
         .delete()
@@ -105,6 +126,52 @@ const ClassManagement = () => {
 
       if (!error) {
         toast({ title: "Success", description: "Class deleted successfully" });
+        fetchClasses();
+      } else {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      }
+    }
+  };
+
+  const handleViewStudents = async (cls: any) => {
+    setViewingStudents(cls);
+    await fetchStudentsForClass(cls.id);
+    setStudentsDialogOpen(true);
+  };
+
+  const handleRemoveStudent = async (studentId: string) => {
+    if (confirm("Remove this student from the class? Their data will remain but they will be unassigned.")) {
+      const { error } = await supabase
+        .from('students')
+        .update({ class_id: null })
+        .eq('id', studentId);
+
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Success", description: "Student removed from class" });
+        if (viewingStudents) {
+          await fetchStudentsForClass(viewingStudents.id);
+        }
+        fetchClasses();
+      }
+    }
+  };
+
+  const handleDeleteStudent = async (studentId: string) => {
+    if (confirm("Permanently delete this student and all their data? This cannot be undone!")) {
+      const { error } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId);
+
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Success", description: "Student deleted permanently" });
+        if (viewingStudents) {
+          await fetchStudentsForClass(viewingStudents.id);
+        }
         fetchClasses();
       }
     }
@@ -229,6 +296,15 @@ const ClassManagement = () => {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => handleViewStudents(cls)}
+                            className="hover:scale-110 transition-transform duration-200"
+                            title="View Students"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => handleEdit(cls)}
                             className="hover:scale-110 transition-transform duration-200"
                           >
@@ -251,6 +327,71 @@ const ClassManagement = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Students Dialog */}
+        <Dialog open={studentsDialogOpen} onOpenChange={setStudentsDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Students in {viewingStudents?.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {classStudents.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <UsersIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No students in this class yet</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Student ID</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {classStudents.map((student) => (
+                      <TableRow key={student.id}>
+                        <TableCell className="font-medium">{student.name}</TableCell>
+                        <TableCell>{student.student_id || "-"}</TableCell>
+                        <TableCell>{student.email || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={student.status === 'active' ? 'default' : 'secondary'}>
+                            {student.status || 'active'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRemoveStudent(student.id)}
+                              title="Remove from class"
+                            >
+                              Remove
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteStudent(student.id)}
+                              title="Delete student permanently"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
