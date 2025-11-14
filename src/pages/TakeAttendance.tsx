@@ -145,45 +145,56 @@ const TakeAttendance = () => {
     if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     if (detectionRafRef.current) cancelAnimationFrame(detectionRafRef.current);
 
-    // Always use mock detection for now (FaceDetector has very limited browser support)
-    detectionIntervalRef.current = setInterval(() => {
-      if (!isStreaming || !videoRef.current || videoRef.current.readyState !== 4) {
-        console.log("Detection loop: video not ready");
+    if (!videoRef.current) return;
+
+    // Prefer the native FaceDetector API. If unavailable, do not mock in production to avoid false positives.
+    const FaceDetectorCtor = (window as any).FaceDetector;
+    if (!FaceDetectorCtor) {
+      console.warn("FaceDetector API not supported in this browser");
+      toast({
+        title: "Face detection unavailable",
+        description: "Your browser doesn't support native face detection. You can still use manual marking.",
+      });
+      return;
+    }
+
+    try {
+      faceDetectorRef.current = new FaceDetectorCtor({ fastMode: true });
+    } catch (e) {
+      console.error("Failed to initialize FaceDetector", e);
+      return;
+    }
+
+    const detect = async () => {
+      if (!isStreaming || !videoRef.current) return;
+      const video = videoRef.current;
+      if (video.readyState !== 4) {
+        detectionRafRef.current = requestAnimationFrame(detect);
         return;
       }
 
-      console.log("Detecting faces...");
-      const mockFaces: DetectedFace[] = [];
-      
-      // Always show at least one mock box for testing
-      // In center of video
-      mockFaces.push({
-        box: { x: 150, y: 100, width: 200, height: 240 },
-        confidence: 0.9,
-      });
-
-      // Randomly add a recognized student
-      if (classStudents.length > 0 && Math.random() > 0.3) {
-        const randomStudent = classStudents[Math.floor(Math.random() * classStudents.length)];
-        mockFaces.push({
-          box: { x: 400, y: 100, width: 200, height: 240 },
-          studentId: randomStudent.id,
-          studentName: randomStudent.name,
-          confidence: 0.95,
-        });
+      try {
+        // @ts-ignore - FaceDetector types not available
+        const faces = await faceDetectorRef.current.detect(video);
+        const mapped: DetectedFace[] = (faces || []).map((f: any) => ({
+          box: {
+            x: f.boundingBox?.x ?? 0,
+            y: f.boundingBox?.y ?? 0,
+            width: f.boundingBox?.width ?? 0,
+            height: f.boundingBox?.height ?? 0,
+          },
+          // No recognition implemented yet; avoid auto-marking to prevent spam
+        }));
+        setDetectedFaces(mapped);
+        drawDetections(mapped);
+      } catch (err) {
+        console.error("Face detection error", err);
       }
 
-      console.log("Detected faces:", mockFaces.length);
-      setDetectedFaces(mockFaces);
-      drawDetections(mockFaces);
-      
-      // Auto-mark attendance
-      mockFaces.forEach(face => {
-        if (face.studentId && !markedAttendance.has(face.studentId)) {
-          markAttendance(face.studentId, 'present');
-        }
-      });
-    }, 2000);
+      detectionRafRef.current = requestAnimationFrame(detect);
+    };
+
+    detectionRafRef.current = requestAnimationFrame(detect);
   };
 
   const drawDetections = (faces: DetectedFace[]) => {
