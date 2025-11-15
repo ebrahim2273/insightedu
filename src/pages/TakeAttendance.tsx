@@ -374,6 +374,7 @@ const TakeAttendance = () => {
 
         // Detect faces with descriptors
         const detections = await detectFacesWithDescriptors(video);
+        console.log('Detections found:', detections.length);
         setFaceCount(detections.length);
         
         // Clear pending matches for students not currently detected
@@ -381,12 +382,15 @@ const TakeAttendance = () => {
         
         // Process each detected face
         for (const detection of detections) {
+          console.log('Processing detection, has descriptor:', !!detection.descriptor);
           if (detection.descriptor && studentDescriptors.length > 0) {
+            console.log('Student descriptors count:', studentDescriptors.length, 'Threshold:', thresholdRef.current);
             const match = findBestMatchFromDescriptor(
               detection.descriptor,
               studentDescriptors,
               thresholdRef.current // Use ref to get current threshold value
             );
+            console.log('Match result:', match);
             
             // Track metrics
             setRecognitionMetrics(prev => {
@@ -447,7 +451,10 @@ const TakeAttendance = () => {
           }
         }
       } catch (err) {
-        console.error('Detection error:', err);
+        console.error('Detection loop error:', err);
+        console.error('Error stack:', err);
+        console.error('Video ready state:', video?.readyState);
+        console.error('Model status:', modelStatus);
       }
 
       detectionRafRef.current = requestAnimationFrame(detectLoop);

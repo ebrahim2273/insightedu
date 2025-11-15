@@ -35,10 +35,11 @@ export async function detectFacesWithDescriptors(video: HTMLVideoElement) {
   }
   
   const detections = await faceapi
-    .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+    .detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
     .withFaceLandmarks()
     .withFaceDescriptors();
   
+  console.log('Face-api detections:', detections.length);
   return detections;
 }
 
