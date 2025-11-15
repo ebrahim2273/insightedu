@@ -412,7 +412,7 @@ const AddStudent = () => {
                     id="studentId"
                     value={formData.studentId}
                     onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                    placeholder="e.g., STU-2025-001"
+                    placeholder="e.g., 20xxxxxxxx"
                     className="transition-all duration-200 focus:scale-[1.01]"
                     required
                   />

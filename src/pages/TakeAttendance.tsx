@@ -118,6 +118,11 @@ const TakeAttendance = () => {
       setLoadingStudents(true);
       console.log(`Fetching students for class: ${selectedClass}`);
       
+      // Get today's date range
+      const today = new Date();
+      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+      
       // Fetch students for selected class
       const { data: studentsData, error: studentsError} = await supabase
         .from('students')
@@ -127,10 +132,31 @@ const TakeAttendance = () => {
       if (studentsError) throw studentsError;
       
       console.log(`Found ${studentsData?.length || 0} students`);
+      
+      // Fetch today's attendance for these students
+      const studentIds = studentsData?.map(s => s.id) || [];
+      let attendanceMap: Record<string, boolean> = {};
+      
+      if (studentIds.length > 0) {
+        const { data: attendanceData } = await supabase
+          .from('attendance')
+          .select('student_id, status')
+          .eq('class_id', selectedClass)
+          .in('student_id', studentIds)
+          .gte('marked_at', startOfDay)
+          .lte('marked_at', endOfDay);
+        
+        // Build map of students already marked present today
+        attendanceData?.forEach(att => {
+          if (att.status === 'present') {
+            attendanceMap[att.student_id] = true;
+            markedStudents.current.add(att.student_id);
+          }
+        });
+      }
+      
       setStudents(studentsData || []);
       
-      // Fetch face embeddings for these students
-      const studentIds = studentsData?.map(s => s.id) || [];
       if (studentIds.length === 0) {
         setStudentDescriptors([]);
         setProfilesLoaded(0);
