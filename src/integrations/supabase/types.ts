@@ -216,6 +216,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_settings: {
+        Row: {
+          auto_mark_attendance: boolean | null
+          confidence_threshold: number | null
+          created_at: string | null
+          detection_method: string | null
+          email_alerts: boolean | null
+          id: string
+          notifications: boolean | null
+          photos_per_student: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_mark_attendance?: boolean | null
+          confidence_threshold?: number | null
+          created_at?: string | null
+          detection_method?: string | null
+          email_alerts?: boolean | null
+          id?: string
+          notifications?: boolean | null
+          photos_per_student?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_mark_attendance?: boolean | null
+          confidence_threshold?: number | null
+          created_at?: string | null
+          detection_method?: string | null
+          email_alerts?: boolean | null
+          id?: string
+          notifications?: boolean | null
+          photos_per_student?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
