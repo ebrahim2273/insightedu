@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Camera, Trash2, Check, Loader2 } from "lucide-react";
+import { Camera, Trash2, Check, Loader2, Upload, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { loadFaceApiModels, generateFaceDescriptor } from "@/lib/faceApiHelper";
@@ -19,6 +19,7 @@ const AddStudent = () => {
   const completionShownRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -31,6 +32,7 @@ const AddStudent = () => {
   const { toast } = useToast();
 
   const TARGET_PHOTOS = 20;
+  const MIN_PHOTOS = 5;
 
   useEffect(() => {
     fetchClasses();
@@ -218,13 +220,59 @@ const AddStudent = () => {
     setCapturedImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  const removeUploadedImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newImages: string[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid File",
+          description: `${file.name} is not an image`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      // Convert to base64
+      const reader = new FileReader();
+      const imageData = await new Promise<string>((resolve) => {
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+      });
+      
+      newImages.push(imageData);
+    }
+
+    setUploadedImages(prev => [...prev, ...newImages]);
+    
+    toast({
+      title: "Photos Uploaded",
+      description: `${newImages.length} photo(s) added successfully`,
+    });
+
+    // Reset input
+    e.target.value = '';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (capturedImages.length < TARGET_PHOTOS) {
+    const allImages = [...capturedImages, ...uploadedImages];
+    
+    if (allImages.length < MIN_PHOTOS) {
       toast({
         title: "Error",
-        description: `Please capture ${TARGET_PHOTOS} images using the camera`,
+        description: `Please provide at least ${MIN_PHOTOS} photos (camera capture or upload)`,
         variant: "destructive",
       });
       return;
@@ -259,15 +307,16 @@ const AddStudent = () => {
         return;
       }
 
-      // Generate embeddings for each captured image
+      // Generate embeddings for all images (captured + uploaded)
+      const allImages = [...capturedImages, ...uploadedImages];
       toast({
         title: "Processing",
-        description: `Generating face descriptors from ${capturedImages.length} images...`,
+        description: `Generating face descriptors from ${allImages.length} images...`,
       });
 
       const descriptors = [];
-      for (let i = 0; i < capturedImages.length; i++) {
-        const imageData = capturedImages[i];
+      for (let i = 0; i < allImages.length; i++) {
+        const imageData = allImages[i];
         
         // Convert data URL to Image element
         const img = new Image();
@@ -284,14 +333,19 @@ const AddStudent = () => {
         if ((i + 1) % 5 === 0) {
           toast({
             title: "Processing",
-            description: `Processed ${i + 1} of ${capturedImages.length} images...`,
+            description: `Processed ${i + 1} of ${allImages.length} images...`,
           });
         }
       }
 
       if (descriptors.length === 0) {
-        throw new Error('No faces detected in captured images');
+        throw new Error('No faces detected in provided images');
       }
+
+      toast({
+        title: "Processing",
+        description: `Storing ${descriptors.length} face descriptors...`,
+      });
 
       // Store descriptors in database
       for (let i = 0; i < descriptors.length; i++) {
@@ -300,7 +354,7 @@ const AddStudent = () => {
           .insert([{
             student_id: student.id,
             embedding_data: { embedding: descriptors[i] },
-            image_url: capturedImages[i],
+            image_url: allImages[i],
           }]);
       }
 
@@ -312,6 +366,7 @@ const AddStudent = () => {
       // Reset form
       setFormData({ name: "", studentId: "", classId: "" });
       setCapturedImages([]);
+      setUploadedImages([]);
       stopCamera();
     } catch (error: any) {
       console.error('Registration error:', error);
@@ -380,7 +435,7 @@ const AddStudent = () => {
                 <Button 
                   type="submit" 
                   className="w-full gap-2 hover:scale-[1.02] transition-transform duration-200"
-                  disabled={isProcessing || capturedImages.length < TARGET_PHOTOS}
+                  disabled={isProcessing || (capturedImages.length + uploadedImages.length) < MIN_PHOTOS}
                 >
                   {isProcessing ? (
                     <>
@@ -401,7 +456,10 @@ const AddStudent = () => {
           {/* Camera */}
           <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.1s" }}>
             <CardHeader>
-              <CardTitle>Capture Face Images ({capturedImages.length}/{TARGET_PHOTOS})</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Camera className="h-5 w-5" />
+                Capture Photos ({capturedImages.length} captured)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
@@ -470,6 +528,83 @@ const AddStudent = () => {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Upload Photos Section */}
+          <Card className="border-border/50 animate-scale-in hover:shadow-lg transition-shadow duration-300" style={{ animationDelay: "0.2s" }}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Upload Photos ({uploadedImages.length} uploaded)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>Upload photos from different angles and lighting conditions for better recognition accuracy.</p>
+                <p className="font-medium">Tips:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Front-facing, left profile, right profile</li>
+                  <li>Different lighting (bright, dim, natural)</li>
+                  <li>Various expressions (neutral, smiling)</li>
+                  <li>With/without glasses if applicable</li>
+                </ul>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="flex-1"
+                  id="photo-upload"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => document.getElementById('photo-upload')?.click()}
+                  className="gap-2"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  Browse
+                </Button>
+              </div>
+
+              {uploadedImages.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {uploadedImages.map((img, index) => (
+                    <div 
+                      key={index} 
+                      className="relative group animate-scale-in"
+                      style={{ animationDelay: `${index * 0.1}s` }}
+                    >
+                      <img
+                        src={img}
+                        alt={`Upload ${index + 1}`}
+                        className="w-full aspect-square object-cover rounded-lg border border-border transition-all duration-200 group-hover:scale-105"
+                      />
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        onClick={() => removeUploadedImage(index)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
+                <p className="text-sm text-center">
+                  <span className="font-semibold text-primary">
+                    Total: {capturedImages.length + uploadedImages.length} photos
+                  </span>
+                  {' '} • Minimum: {MIN_PHOTOS} photos • Recommended: {TARGET_PHOTOS}+ photos
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
