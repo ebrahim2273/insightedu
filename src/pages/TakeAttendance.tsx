@@ -20,7 +20,6 @@ interface StudentDescriptors {
   descriptors: Float32Array[];
 }
 
-const SIMILARITY_THRESHOLD = 0.5; // Stricter threshold for better differentiation
 const MIN_CONFIDENCE_PERCENTAGE = 75; // Require at least 75% match for higher accuracy
 const REQUIRED_CONSECUTIVE_MATCHES = 4; // Need 4 consecutive matches to confirm identity
 
@@ -32,6 +31,7 @@ const TakeAttendance = () => {
   const markedStudents = useRef<Set<string>>(new Set());
   const lastProcessTime = useRef<number>(0);
   const pendingMatches = useRef<Map<string, { count: number; sumConfidence: number; name: string }>>(new Map());
+  const thresholdRef = useRef<number>(0.5); // Dynamic threshold ref
   
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string>("");
@@ -55,6 +55,12 @@ const TakeAttendance = () => {
   });
   
   const { toast } = useToast();
+
+  // Update threshold ref whenever settings change
+  useEffect(() => {
+    thresholdRef.current = settings.confidenceThreshold || 0.5;
+    console.log('Threshold updated to:', thresholdRef.current);
+  }, [settings.confidenceThreshold]);
 
   const handleExportCSV = async () => {
     try {
@@ -379,7 +385,7 @@ const TakeAttendance = () => {
             const match = findBestMatchFromDescriptor(
               detection.descriptor,
               studentDescriptors,
-              settings.confidenceThreshold || 0.5
+              thresholdRef.current // Use ref to get current threshold value
             );
             
             // Track metrics
@@ -522,8 +528,8 @@ const TakeAttendance = () => {
                   <span className="font-semibold">{profilesLoaded}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Min Confidence: </span>
-                  <span className="font-semibold text-primary">{MIN_CONFIDENCE_PERCENTAGE}%</span>
+                  <span className="text-muted-foreground">Threshold: </span>
+                  <span className="font-semibold text-primary">{(thresholdRef.current * 100).toFixed(0)}%</span>
                 </div>
               </div>
               
@@ -559,6 +565,15 @@ const TakeAttendance = () => {
                     </div>
                     
                     <div className="border-t pt-4 space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-muted-foreground">Current Threshold</p>
+                          <p className="text-lg font-semibold text-primary">
+                            {(thresholdRef.current * 100).toFixed(0)}%
+                          </p>
+                        </div>
+                      </div>
+                      
                       <div className="space-y-1">
                         <div className="flex justify-between items-center">
                           <p className="text-sm text-muted-foreground">R² (Confidence Correlation)</p>
