@@ -1,7 +1,8 @@
 import { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { LogOut, Menu, Eye, LayoutDashboard, Camera, BarChart3, Users, History, UserPlus, Settings } from "lucide-react";
+import { LogOut, Menu, Eye, LayoutDashboard, Camera, BarChart3, Users, History, UserPlus, Settings, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "next-themes";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Link } from "react-router-dom";
@@ -13,6 +14,7 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const { signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   return (
     <SidebarProvider>
@@ -80,15 +82,30 @@ const Layout = ({ children }: LayoutProps) => {
 
             <div className="h-10 w-px bg-border hidden lg:block mx-4" />
 
-            <Button
-              onClick={signOut}
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-200 hover:scale-105"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                variant="ghost"
+                size="sm"
+                className="hover:bg-secondary transition-all duration-200 hover:scale-105"
+              >
+                {theme === "dark" ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Moon className="w-4 h-4" />
+                )}
+              </Button>
+
+              <Button
+                onClick={signOut}
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-200 hover:scale-105"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Logout</span>
+              </Button>
+            </div>
           </header>
 
           {/* Page Content */}
