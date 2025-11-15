@@ -19,7 +19,7 @@ const StatCard = ({ title, value, icon: Icon, gradient = true }: StatCardProps) 
         <div className="flex items-center justify-between mb-4">
           <div className={cn(
             "p-3 rounded-lg transition-all duration-300",
-            "bg-primary/10 hover:bg-primary/20 hover:shadow-lg hover:shadow-primary/20 animate-pulse-glow"
+            "bg-primary/10 hover:bg-primary/20 hover:shadow-lg hover:shadow-primary/20"
           )}>
             <Icon className="w-6 h-6 text-primary drop-shadow-[0_0_8px_rgba(71,209,199,0.5)]" />
           </div>

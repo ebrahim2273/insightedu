@@ -8,60 +8,60 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* InSight Light Theme */
-    --background: 0 0% 100%;
-    --foreground: 220 26% 14%;
+    /* InSight Light Theme - Softer */
+    --background: 220 14% 95%;
+    --foreground: 220 26% 18%;
 
     --card: 0 0% 98%;
-    --card-foreground: 220 26% 14%;
+    --card-foreground: 220 26% 18%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 26% 14%;
+    --popover-foreground: 220 26% 18%;
 
-    --primary: 174 72% 56%;
+    --primary: 174 72% 45%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 26% 14%;
+    --secondary: 220 14% 90%;
+    --secondary-foreground: 220 26% 18%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 220 14% 92%;
+    --muted-foreground: 220 10% 40%;
 
-    --accent: 174 72% 56%;
+    --accent: 174 72% 45%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 72% 45%;
+    --success: 142 72% 40%;
     --success-foreground: 0 0% 100%;
 
-    --border: 220 14% 90%;
-    --input: 220 14% 90%;
-    --ring: 174 72% 56%;
+    --border: 220 14% 85%;
+    --input: 220 14% 85%;
+    --ring: 174 72% 45%;
 
     --radius: 0.5rem;
 
     /* Gradient colors */
-    --gradient-from: 174 72% 56%;
-    --gradient-to: 217 91% 60%;
+    --gradient-from: 174 72% 45%;
+    --gradient-to: 217 91% 55%;
     
     /* Enhanced glow colors */
-    --glow-primary: 174 72% 56%;
-    --glow-secondary: 217 91% 60%;
-    --glow-success: 142 72% 45%;
+    --glow-primary: 174 72% 45%;
+    --glow-secondary: 217 91% 55%;
+    --glow-success: 142 72% 40%;
     
     /* Grid animation */
-    --grid-color: 174 72% 56%;
+    --grid-color: 174 72% 45%;
     
     /* Status colors */
-    --status-present: 142 72% 45%;
+    --status-present: 142 72% 40%;
     --status-absent: 0 72% 51%;
-    --status-late: 38 92% 50%;
+    --status-late: 38 92% 45%;
     
     /* Shadows & Glows */
-    --shadow-glow: 0 0 20px hsl(174 72% 56% / 0.2);
-    --shadow-intense: 0 0 40px hsl(174 72% 56% / 0.4);
+    --shadow-glow: 0 0 20px hsl(174 72% 45% / 0.2);
+    --shadow-intense: 0 0 40px hsl(174 72% 45% / 0.3);
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -113,17 +113,37 @@ All colors MUST be HSL.
   }
 }
 
-/* Animated Grid Background - Simplified */
+/* Animated Grid Background - Wavy */
 @layer components {
   .animated-grid-bg {
     position: fixed;
     inset: 0;
     z-index: 0;
-    opacity: 0.08;
+    opacity: 0.15;
     background-size: 50px 50px;
     background-image: 
-      linear-gradient(to right, hsl(var(--grid-color) / 0.1) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--grid-color) / 0.1) 1px, transparent 1px);
+      linear-gradient(to right, hsl(var(--grid-color) / 0.2) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--grid-color) / 0.2) 1px, transparent 1px);
+    animation: wave-grid 20s ease-in-out infinite;
+  }
+
+  @keyframes wave-grid {
+    0%, 100% {
+      transform: perspective(500px) rotateX(0deg) translateZ(0);
+      background-position: 0 0;
+    }
+    25% {
+      transform: perspective(500px) rotateX(2deg) translateZ(10px);
+      background-position: 25px 0;
+    }
+    50% {
+      transform: perspective(500px) rotateX(0deg) translateZ(0);
+      background-position: 50px 25px;
+    }
+    75% {
+      transform: perspective(500px) rotateX(-2deg) translateZ(10px);
+      background-position: 25px 50px;
+    }
   }
 }
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import StatCard from "@/components/StatCard";
 import { Users, CheckCircle, XCircle, TrendingUp, BarChart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { LineChart, Line, BarChart as ReBarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const Analytics = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -168,37 +169,218 @@ const Analytics = () => {
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-1 border-border/50">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Weekly Attendance Comparison */}
+          <Card className="border-border/50">
             <CardHeader>
-              <CardTitle>Daily Attendance Trend</CardTitle>
+              <CardTitle>Weekly Attendance Comparison</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-64 flex items-center justify-center border border-border rounded-lg">
-                <p className="text-muted-foreground">Chart visualization</p>
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <ReBarChart data={[
+                  { day: 'Mon', present: 45, absent: 5 },
+                  { day: 'Tue', present: 48, absent: 2 },
+                  { day: 'Wed', present: 42, absent: 8 },
+                  { day: 'Thu', present: 47, absent: 3 },
+                  { day: 'Fri', present: 44, absent: 6 },
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }} 
+                  />
+                  <Legend />
+                  <Bar dataKey="present" fill="hsl(var(--success))" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="absent" fill="hsl(var(--destructive))" radius={[8, 8, 0, 0]} />
+                </ReBarChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-1 border-border/50">
+          {/* Attendance Distribution */}
+          <Card className="border-border/50">
             <CardHeader>
-              <CardTitle>Hourly Attendance Pattern</CardTitle>
+              <CardTitle>Attendance Distribution</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-64 flex items-center justify-center border border-border rounded-lg">
-                <p className="text-muted-foreground">Chart visualization</p>
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Present', value: stats.presentToday },
+                      { name: 'Absent', value: stats.absentToday },
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell fill="hsl(var(--success))" />
+                    <Cell fill="hsl(var(--destructive))" />
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }} 
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-1 border-border/50">
+          {/* Monthly Trends */}
+          <Card className="border-border/50">
             <CardHeader>
-              <CardTitle>Class-wise Attendance</CardTitle>
+              <CardTitle>Monthly Attendance Trends</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-64 flex items-center justify-center border border-border rounded-lg">
-                <p className="text-muted-foreground">Chart visualization</p>
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={[
+                  { month: 'Jan', rate: 85 },
+                  { month: 'Feb', rate: 88 },
+                  { month: 'Mar', rate: 92 },
+                  { month: 'Apr', rate: 87 },
+                  { month: 'May', rate: 90 },
+                  { month: 'Jun', rate: 94 },
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }} 
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="rate" 
+                    stroke="hsl(var(--primary))" 
+                    fill="hsl(var(--primary) / 0.2)" 
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Class Performance */}
+          <Card className="border-border/50">
+            <CardHeader>
+              <CardTitle>Top Performing Classes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <ReBarChart 
+                  data={[
+                    { class: 'CS-101', rate: 95 },
+                    { class: 'MATH-201', rate: 92 },
+                    { class: 'PHY-301', rate: 88 },
+                    { class: 'BIO-102', rate: 85 },
+                    { class: 'ENG-101', rate: 82 },
+                  ]}
+                  layout="vertical"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis dataKey="class" type="category" stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }} 
+                  />
+                  <Bar dataKey="rate" fill="hsl(var(--accent))" radius={[0, 8, 8, 0]} />
+                </ReBarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Daily Pattern */}
+          <Card className="border-border/50">
+            <CardHeader>
+              <CardTitle>Daily Attendance Pattern</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={[
+                  { time: '8AM', attendance: 15 },
+                  { time: '9AM', attendance: 35 },
+                  { time: '10AM', attendance: 48 },
+                  { time: '11AM', attendance: 50 },
+                  { time: '12PM', attendance: 45 },
+                  { time: '1PM', attendance: 42 },
+                  { time: '2PM', attendance: 38 },
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }} 
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="attendance" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={3}
+                    dot={{ fill: 'hsl(var(--primary))', r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Student Status Distribution */}
+          <Card className="border-border/50">
+            <CardHeader>
+              <CardTitle>Student Status Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Active', value: stats.totalStudents },
+                      { name: 'Inactive', value: 5 },
+                      { name: 'Graduated', value: 12 },
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell fill="hsl(var(--success))" />
+                    <Cell fill="hsl(var(--muted-foreground))" />
+                    <Cell fill="hsl(var(--accent))" />
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }} 
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
         </div>
