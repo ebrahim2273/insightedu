@@ -21,7 +21,7 @@ interface StudentDescriptors {
 }
 
 const MIN_CONFIDENCE_PERCENTAGE = 75; // Require at least 75% match for higher accuracy
-const REQUIRED_CONSECUTIVE_MATCHES = 4; // Need 4 consecutive matches to confirm identity
+const REQUIRED_CONSECUTIVE_MATCHES = 3; // Need 3 consecutive matches to confirm identity
 
 const TakeAttendance = () => {
   const { settings } = useSettings();
