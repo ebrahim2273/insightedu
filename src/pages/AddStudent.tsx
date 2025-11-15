@@ -9,8 +9,10 @@ import { Camera, Trash2, Check, Loader2, Upload, Image as ImageIcon } from "luci
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { loadFaceApiModels, generateFaceDescriptor } from "@/lib/faceApiHelper";
+import { useSettings } from "@/hooks/useSettings";
 
 const AddStudent = () => {
+  const { settings } = useSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,8 +33,17 @@ const AddStudent = () => {
   });
   const { toast } = useToast();
 
-  const TARGET_PHOTOS = 20;
-  const MIN_PHOTOS = 5;
+  const TARGET_PHOTOS = settings.photosPerStudent || 20;
+  const MIN_PHOTOS = Math.max(5, Math.floor(TARGET_PHOTOS * 0.4));
+  
+  const CAPTURE_INSTRUCTIONS = [
+    "Look straight ahead",
+    "Turn slightly left",
+    "Turn slightly right", 
+    "Tilt head up slightly",
+    "Tilt head down slightly",
+    "Smile naturally"
+  ];
 
   useEffect(() => {
     fetchClasses();
@@ -96,7 +107,11 @@ const AddStudent = () => {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.lineWidth = 3;
     ctx.font = '600 16px system-ui';
-    const msg = isCapturing ? `${capturedImages.length}/${TARGET_PHOTOS} photos` : 'Position face here';
+    const instructionIndex = Math.floor((capturedImages.length / TARGET_PHOTOS) * CAPTURE_INSTRUCTIONS.length);
+    const instruction = isCapturing && instructionIndex < CAPTURE_INSTRUCTIONS.length 
+      ? CAPTURE_INSTRUCTIONS[instructionIndex] 
+      : 'Position face here';
+    const msg = isCapturing ? `${capturedImages.length}/${TARGET_PHOTOS} - ${instruction}` : instruction;
     const textW = ctx.measureText(msg).width;
     const textX = (canvas.width - textW) / 2;
     const textY = y - 16;

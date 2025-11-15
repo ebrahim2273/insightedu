@@ -6,11 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Camera, Square, CheckCircle2, XCircle, Loader2, BarChart3 } from "lucide-react";
+import { Camera, Square, CheckCircle2, XCircle, Loader2, BarChart3, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/hooks/useSettings";
 import { cn } from "@/lib/utils";
 import { loadFaceApiModels, detectFacesWithDescriptors, findBestMatchFromDescriptor } from "@/lib/faceApiHelper";
+import { exportToCSV } from "@/utils/csvExport";
 
 interface StudentDescriptors {
   studentId: string;
@@ -23,6 +25,7 @@ const MIN_CONFIDENCE_PERCENTAGE = 75; // Require at least 75% match for higher a
 const REQUIRED_CONSECUTIVE_MATCHES = 4; // Need 4 consecutive matches to confirm identity
 
 const TakeAttendance = () => {
+  const { settings } = useSettings();
   const videoRef = useRef<HTMLVideoElement>(null);
   const detectionRafRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -52,6 +55,76 @@ const TakeAttendance = () => {
   });
   
   const { toast } = useToast();
+
+  const handleExportCSV = async () => {
+    try {
+      if (!selectedClass) {
+        toast({
+          title: "No class selected",
+          description: "Please select a class first",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get today's date
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Fetch attendance records for today
+      const { data: attendanceData, error } = await supabase
+        .from('attendance')
+        .select(`
+          id,
+          status,
+          marked_at,
+          notes,
+          student:students (
+            name,
+            student_id,
+            email
+          )
+        `)
+        .eq('class_id', selectedClass)
+        .gte('marked_at', `${today}T00:00:00`)
+        .lte('marked_at', `${today}T23:59:59`);
+
+      if (error) throw error;
+
+      if (!attendanceData || attendanceData.length === 0) {
+        toast({
+          title: "No data to export",
+          description: "No attendance records found for today",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Format data for CSV
+      const csvData = attendanceData.map(record => ({
+        'Student Name': record.student?.name || 'Unknown',
+        'Student ID': record.student?.student_id || 'N/A',
+        'Email': record.student?.email || 'N/A',
+        'Status': record.status,
+        'Marked At': new Date(record.marked_at || '').toLocaleString(),
+        'Notes': record.notes || ''
+      }));
+
+      const className = classes.find(c => c.id === selectedClass)?.name || 'attendance';
+      exportToCSV(csvData, `${className}_attendance`);
+
+      toast({
+        title: "Export successful",
+        description: `Exported ${csvData.length} attendance records`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export failed",
+        description: "Failed to export attendance data",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Fetch classes on mount and cleanup
   useEffect(() => {
@@ -306,7 +379,7 @@ const TakeAttendance = () => {
             const match = findBestMatchFromDescriptor(
               detection.descriptor,
               studentDescriptors,
-              SIMILARITY_THRESHOLD
+              settings.confidenceThreshold || 0.5
             );
             
             // Track metrics
@@ -621,8 +694,17 @@ const TakeAttendance = () => {
         {/* Student List */}
         {selectedClass && students.length > 0 && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Students ({students.length})</CardTitle>
+              <Button
+                onClick={handleExportCSV}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">

@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Users as UsersIcon, Eye } from "lucide-react";
+import { Plus, Edit, Trash2, Users as UsersIcon, Eye, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { parseCSVFile } from "@/utils/csvExport";
 
 const ClassManagement = () => {
   const [classes, setClasses] = useState<any[]>([]);
@@ -19,6 +20,8 @@ const ClassManagement = () => {
   const [viewingStudents, setViewingStudents] = useState<any>(null);
   const [studentsDialogOpen, setStudentsDialogOpen] = useState(false);
   const [classStudents, setClassStudents] = useState<any[]>([]);
+  const [bulkImportDialogOpen, setBulkImportDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -177,6 +180,70 @@ const ClassManagement = () => {
     }
   };
 
+  const handleBulkImport = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "No file selected",
+        description: "Please select a CSV file to import",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!viewingStudents) {
+      toast({
+        title: "No class selected",
+        description: "Please open a class first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const csvData = await parseCSVFile(selectedFile);
+      
+      // Expected CSV columns: name, student_id, email
+      const studentsToInsert = csvData.map(row => ({
+        name: row.name || row.Name,
+        student_id: row.student_id || row['Student ID'] || row.id,
+        email: row.email || row.Email,
+        class_id: viewingStudents.id,
+      })).filter(s => s.name); // Only include rows with names
+
+      if (studentsToInsert.length === 0) {
+        toast({
+          title: "No valid data",
+          description: "CSV file must contain 'name' column",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('students')
+        .insert(studentsToInsert);
+
+      if (error) throw error;
+
+      toast({
+        title: "Import successful",
+        description: `Imported ${studentsToInsert.length} students`,
+      });
+
+      setBulkImportDialogOpen(false);
+      setSelectedFile(null);
+      fetchStudentsForClass(viewingStudents.id);
+      fetchClasses();
+    } catch (error) {
+      console.error('Import error:', error);
+      toast({
+        title: "Import failed",
+        description: error instanceof Error ? error.message : "Failed to import students",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Layout>
       <div className="space-y-6 animate-fade-in">
@@ -332,9 +399,20 @@ const ClassManagement = () => {
         <Dialog open={studentsDialogOpen} onOpenChange={setStudentsDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
-                Students in {viewingStudents?.name}
-              </DialogTitle>
+              <div className="flex items-center justify-between">
+                <DialogTitle>
+                  Students in {viewingStudents?.name}
+                </DialogTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkImportDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Bulk Import CSV
+                </Button>
+              </div>
             </DialogHeader>
             <div className="space-y-4">
               {classStudents.length === 0 ? (
@@ -381,6 +459,42 @@ const ClassManagement = () => {
                   </TableBody>
                 </Table>
               )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Import Dialog */}
+        <Dialog open={bulkImportDialogOpen} onOpenChange={setBulkImportDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Bulk Import Students</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>CSV File</Label>
+                <Input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                />
+                <p className="text-sm text-muted-foreground mt-2">
+                  CSV should have columns: name, student_id, email
+                </p>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setBulkImportDialogOpen(false);
+                    setSelectedFile(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleBulkImport}>
+                  Import Students
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
