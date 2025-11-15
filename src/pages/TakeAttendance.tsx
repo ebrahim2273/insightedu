@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Camera, Square, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Camera, Square, CheckCircle2, XCircle, Loader2, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,16 @@ const TakeAttendance = () => {
   const [studentDescriptors, setStudentDescriptors] = useState<StudentDescriptors[]>([]);
   const [studentConfidenceScores, setStudentConfidenceScores] = useState<Map<string, number>>(new Map());
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  
+  // Recognition metrics state
+  const [recognitionMetrics, setRecognitionMetrics] = useState({
+    totalAttempts: 0,
+    successfulMatches: 0,
+    failedAttempts: 0,
+    avgConfidence: 0,
+    avgProcessingTime: 0,
+    confidenceHistory: [] as number[],
+  });
   
   const { toast } = useToast();
 
@@ -247,6 +258,7 @@ const TakeAttendance = () => {
 
       try {
         const now = performance.now();
+        const loopStartTime = now;
         
         // Throttle processing to every 500ms
         if (now - lastProcessTime.current < 500) {
@@ -270,6 +282,24 @@ const TakeAttendance = () => {
               studentDescriptors,
               SIMILARITY_THRESHOLD
             );
+            
+            // Track metrics
+            setRecognitionMetrics(prev => {
+              const newHistory = [...prev.confidenceHistory, match?.confidence || 0].slice(-50);
+              const totalAttempts = prev.totalAttempts + 1;
+              const successfulMatches = match ? prev.successfulMatches + 1 : prev.successfulMatches;
+              const failedAttempts = match ? prev.failedAttempts : prev.failedAttempts + 1;
+              const processingTime = performance.now() - loopStartTime;
+              
+              return {
+                totalAttempts,
+                successfulMatches,
+                failedAttempts,
+                avgConfidence: newHistory.reduce((a, b) => a + b, 0) / newHistory.length,
+                avgProcessingTime: (prev.avgProcessingTime * (totalAttempts - 1) + processingTime) / totalAttempts,
+                confidenceHistory: newHistory,
+              };
+            });
             
             if (match && match.confidence >= MIN_CONFIDENCE_PERCENTAGE && !markedStudents.current.has(match.studentId)) {
               currentDetectedIds.add(match.studentId);
@@ -397,6 +427,96 @@ const TakeAttendance = () => {
                   <span className="font-semibold text-primary">{MIN_CONFIDENCE_PERCENTAGE}%</span>
                 </div>
               </div>
+              
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Metrics</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Recognition Metrics</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Total Attempts</p>
+                        <p className="text-2xl font-bold text-primary">{recognitionMetrics.totalAttempts}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Successful Matches</p>
+                        <p className="text-2xl font-bold text-success">{recognitionMetrics.successfulMatches}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Failed Attempts</p>
+                        <p className="text-2xl font-bold text-destructive">{recognitionMetrics.failedAttempts}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Votes (Required)</p>
+                        <p className="text-2xl font-bold text-accent">{REQUIRED_CONSECUTIVE_MATCHES}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t pt-4 space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-muted-foreground">R² (Confidence Correlation)</p>
+                          <p className="text-lg font-semibold">
+                            {recognitionMetrics.confidenceHistory.length > 0
+                              ? (1 - (recognitionMetrics.confidenceHistory.reduce((sum, val) => sum + Math.pow(val - recognitionMetrics.avgConfidence, 2), 0) / 
+                                  (recognitionMetrics.confidenceHistory.length * Math.pow(recognitionMetrics.avgConfidence, 2) || 1))).toFixed(3)
+                              : '0.000'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-muted-foreground">MAE (Mean Absolute Error)</p>
+                          <p className="text-lg font-semibold">
+                            {recognitionMetrics.confidenceHistory.length > 0
+                              ? (recognitionMetrics.confidenceHistory.reduce((sum, val) => sum + Math.abs(val - MIN_CONFIDENCE_PERCENTAGE), 0) / 
+                                  recognitionMetrics.confidenceHistory.length).toFixed(2)
+                              : '0.00'}%
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-muted-foreground">MSE (Mean Squared Error)</p>
+                          <p className="text-lg font-semibold">
+                            {recognitionMetrics.confidenceHistory.length > 0
+                              ? (recognitionMetrics.confidenceHistory.reduce((sum, val) => sum + Math.pow(val - MIN_CONFIDENCE_PERCENTAGE, 2), 0) / 
+                                  recognitionMetrics.confidenceHistory.length).toFixed(2)
+                              : '0.00'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-muted-foreground">Avg Confidence</p>
+                          <p className="text-lg font-semibold text-primary">
+                            {recognitionMetrics.avgConfidence.toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-muted-foreground">Avg Processing Time</p>
+                          <p className="text-lg font-semibold">
+                            {recognitionMetrics.avgProcessingTime.toFixed(0)}ms
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </CardContent>
         </Card>

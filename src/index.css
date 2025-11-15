@@ -8,36 +8,36 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* InSight Dark Theme - Enhanced Futuristic */
-    --background: 220 26% 8%;
-    --foreground: 210 20% 98%;
+    /* InSight Light Theme */
+    --background: 0 0% 100%;
+    --foreground: 220 26% 14%;
 
-    --card: 220 20% 12%;
-    --card-foreground: 210 20% 98%;
+    --card: 0 0% 98%;
+    --card-foreground: 220 26% 14%;
 
-    --popover: 220 20% 12%;
-    --popover-foreground: 210 20% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 26% 14%;
 
     --primary: 174 72% 56%;
-    --primary-foreground: 220 26% 8%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 20% 16%;
-    --secondary-foreground: 210 20% 98%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 26% 14%;
 
-    --muted: 220 20% 14%;
-    --muted-foreground: 210 10% 65%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 45%;
 
     --accent: 174 72% 56%;
-    --accent-foreground: 220 26% 8%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --success: 142 72% 52%;
-    --success-foreground: 220 26% 8%;
+    --success: 142 72% 45%;
+    --success-foreground: 0 0% 100%;
 
-    --border: 220 20% 18%;
-    --input: 220 20% 18%;
+    --border: 220 14% 90%;
+    --input: 220 14% 90%;
     --ring: 174 72% 56%;
 
     --radius: 0.5rem;
@@ -49,19 +49,19 @@ All colors MUST be HSL.
     /* Enhanced glow colors */
     --glow-primary: 174 72% 56%;
     --glow-secondary: 217 91% 60%;
-    --glow-success: 142 72% 52%;
+    --glow-success: 142 72% 45%;
     
     /* Grid animation */
     --grid-color: 174 72% 56%;
     
     /* Status colors */
-    --status-present: 142 72% 52%;
+    --status-present: 142 72% 45%;
     --status-absent: 0 72% 51%;
     --status-late: 38 92% 50%;
     
     /* Shadows & Glows */
-    --shadow-glow: 0 0 20px hsl(174 72% 56% / 0.3);
-    --shadow-intense: 0 0 40px hsl(174 72% 56% / 0.6);
+    --shadow-glow: 0 0 20px hsl(174 72% 56% / 0.2);
+    --shadow-intense: 0 0 40px hsl(174 72% 56% / 0.4);
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
