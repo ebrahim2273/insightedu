@@ -35,7 +35,7 @@ const Auth = () => {
         title: "Success",
         description: "Logged in successfully",
       });
-      navigate('/');
+      // Navigation is handled by auth context
     }
 
     setIsLoading(false);
