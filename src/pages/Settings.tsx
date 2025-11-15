@@ -5,24 +5,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
-import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/hooks/useSettings";
+import { useState, useEffect } from "react";
 
 const Settings = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [settings, setSettings] = useState({
-    notifications: true,
-    emailAlerts: false,
-    autoMarkAttendance: true,
-    confidenceThreshold: 0.85,
-  });
+  const { settings: globalSettings, updateSettings, loading } = useSettings();
+  const [localSettings, setLocalSettings] = useState(globalSettings);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    toast({
-      title: "Settings Saved",
-      description: "Your preferences have been updated",
-    });
+  useEffect(() => {
+    setLocalSettings(globalSettings);
+  }, [globalSettings]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateSettings(localSettings);
+      toast({
+        title: "Settings Saved",
+        description: "Your preferences have been updated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save settings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -65,8 +79,9 @@ const Settings = () => {
                 <p className="text-sm text-muted-foreground">Receive in-app notifications</p>
               </div>
               <Switch
-                checked={settings.notifications}
-                onCheckedChange={(checked) => setSettings({ ...settings, notifications: checked })}
+                checked={localSettings.notifications}
+                onCheckedChange={(checked) => setLocalSettings({ ...localSettings, notifications: checked })}
+                disabled={loading}
               />
             </div>
             <div className="flex items-center justify-between">
@@ -75,8 +90,9 @@ const Settings = () => {
                 <p className="text-sm text-muted-foreground">Get attendance summaries via email</p>
               </div>
               <Switch
-                checked={settings.emailAlerts}
-                onCheckedChange={(checked) => setSettings({ ...settings, emailAlerts: checked })}
+                checked={localSettings.emailAlerts}
+                onCheckedChange={(checked) => setLocalSettings({ ...localSettings, emailAlerts: checked })}
+                disabled={loading}
               />
             </div>
           </CardContent>
@@ -95,8 +111,9 @@ const Settings = () => {
                 <p className="text-sm text-muted-foreground">Automatically mark when face is recognized</p>
               </div>
               <Switch
-                checked={settings.autoMarkAttendance}
-                onCheckedChange={(checked) => setSettings({ ...settings, autoMarkAttendance: checked })}
+                checked={localSettings.autoMarkAttendance}
+                onCheckedChange={(checked) => setLocalSettings({ ...localSettings, autoMarkAttendance: checked })}
+                disabled={loading}
               />
             </div>
             <div>
@@ -107,17 +124,20 @@ const Settings = () => {
                 min="0"
                 max="1"
                 step="0.05"
-                value={settings.confidenceThreshold}
-                onChange={(e) => setSettings({ ...settings, confidenceThreshold: parseFloat(e.target.value) })}
+                value={localSettings.confidenceThreshold}
+                onChange={(e) => setLocalSettings({ ...localSettings, confidenceThreshold: parseFloat(e.target.value) })}
+                disabled={loading}
               />
               <p className="text-sm text-muted-foreground mt-1">
-                Current: {(settings.confidenceThreshold * 100).toFixed(0)}%
+                Current: {(localSettings.confidenceThreshold * 100).toFixed(0)}% - Lower values are more strict, higher values are more lenient
               </p>
             </div>
           </CardContent>
         </Card>
 
-        <Button onClick={handleSave} className="w-full">Save All Settings</Button>
+        <Button onClick={handleSave} className="w-full" disabled={loading || isSaving}>
+          {isSaving ? "Saving..." : "Save All Settings"}
+        </Button>
       </div>
     </Layout>
   );
