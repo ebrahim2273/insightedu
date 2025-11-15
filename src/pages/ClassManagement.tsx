@@ -368,14 +368,6 @@ const ClassManagement = () => {
                           <div className="flex justify-end gap-2">
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => handleRemoveStudent(student.id)}
-                              title="Remove from class"
-                            >
-                              Remove
-                            </Button>
-                            <Button
-                              size="sm"
                               variant="destructive"
                               onClick={() => handleDeleteStudent(student.id)}
                               title="Delete student permanently"
