@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Camera, Square, CheckCircle2, XCircle, Loader2, BarChart3, Download } from "lucide-react";
+import { Camera, Square, CheckCircle2, XCircle, Loader2, BarChart3, Download, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/hooks/useSettings";
@@ -25,6 +26,7 @@ const REQUIRED_CONSECUTIVE_MATCHES = 3; // Need 3 consecutive matches to confirm
 
 const TakeAttendance = () => {
   const { settings } = useSettings();
+  const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const detectionRafRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -61,6 +63,47 @@ const TakeAttendance = () => {
     thresholdRef.current = settings.confidenceThreshold || 0.5;
     console.log('Threshold updated to:', thresholdRef.current);
   }, [settings.confidenceThreshold]);
+
+  const handleEndSession = async () => {
+    try {
+      if (!selectedClass) {
+        toast({
+          title: "No session active",
+          description: "Please select a class first",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Stop camera if running
+      if (isStreaming) {
+        stopCamera();
+      }
+
+      // Get session summary
+      const presentCount = markedStudents.current.size;
+      const totalCount = students.length;
+      const absentCount = totalCount - presentCount;
+
+      toast({
+        title: "Session Ended",
+        description: `Attendance saved: ${presentCount} present, ${absentCount} absent`,
+      });
+
+      // Navigate to analytics after a brief delay
+      setTimeout(() => {
+        navigate('/analytics');
+      }, 1500);
+
+    } catch (error) {
+      console.error('Error ending session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to end session",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleExportCSV = async () => {
     try {
@@ -718,15 +761,26 @@ const TakeAttendance = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Students ({students.length})</CardTitle>
-              <Button
-                onClick={handleExportCSV}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Export CSV
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleEndSession}
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  End Session
+                </Button>
+                <Button
+                  onClick={handleExportCSV}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Export CSV
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
