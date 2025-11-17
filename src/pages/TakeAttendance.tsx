@@ -1,3 +1,31 @@
+/**
+ * ====================================================================
+ * TAKE ATTENDANCE PAGE - Real-time Face Recognition System
+ * ====================================================================
+ * 
+ * PURPOSE: Automatically mark student attendance using webcam face recognition
+ * 
+ * HOW IT WORKS:
+ * 1. Teacher selects class → System loads student face data from database
+ * 2. Camera starts → Continuously analyzes video frames
+ * 3. For each face detected:
+ *    - Generate 128-dimensional "face fingerprint" (descriptor)
+ *    - Compare to all enrolled students' fingerprints
+ *    - If match confidence > 75% AND matches 3 consecutive frames
+ *    - Mark student present in database
+ * 
+ * DATABASE QUERIES:
+ * - SELECT classes → Load teacher's classes
+ * - SELECT students WHERE class_id → Load students in selected class  
+ * - SELECT face_embeddings WHERE student_id → Load face data
+ * - INSERT INTO attendance → Mark student present
+ * 
+ * FACE RECOGNITION MODELS:
+ * - face-api.js (FaceNet) → Generates 128-d face descriptors
+ * - Euclidean distance → Compares face similarity (lower = more similar)
+ * - Threshold: 0.5 default (configurable in settings)
+ */
+
 import { useEffect, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,55 +36,60 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Camera, Square, CheckCircle2, XCircle, Loader2, BarChart3, Download, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Lovable Cloud database client
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/hooks/useSettings";
 import { cn } from "@/lib/utils";
 import { loadFaceApiModels, detectFacesWithDescriptors, findBestMatchFromDescriptor } from "@/lib/faceApiHelper";
 import { exportToCSV } from "@/utils/csvExport";
 
+// Student face data structure - stores multiple face descriptors per student
 interface StudentDescriptors {
   studentId: string;
   studentName: string;
-  descriptors: Float32Array[];
+  descriptors: Float32Array[]; // Array of 128-dimensional face "fingerprints"
 }
 
-const MIN_CONFIDENCE_PERCENTAGE = 75; // Require at least 75% match for higher accuracy
-const REQUIRED_CONSECUTIVE_MATCHES = 3; // Need 3 consecutive matches to confirm identity
+// Recognition accuracy constants
+const MIN_CONFIDENCE_PERCENTAGE = 75; // Minimum 75% match to mark present
+const REQUIRED_CONSECUTIVE_MATCHES = 3; // Must match 3 frames in a row (prevents false positives)
 
 const TakeAttendance = () => {
-  const { settings } = useSettings();
+  // Hooks for settings, navigation, and notifications
+  const { settings } = useSettings(); // User preferences (threshold, photos per student, etc.)
   const navigate = useNavigate();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const detectionRafRef = useRef<number | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const markedStudents = useRef<Set<string>>(new Set());
-  const lastProcessTime = useRef<number>(0);
-  const pendingMatches = useRef<Map<string, { count: number; sumConfidence: number; name: string }>>(new Map());
-  const thresholdRef = useRef<number>(0.5); // Dynamic threshold ref
-  
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<string>("");
-  const [classes, setClasses] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [loadingStudents, setLoadingStudents] = useState(false);
-  const [faceCount, setFaceCount] = useState<number>(0);
-  const [profilesLoaded, setProfilesLoaded] = useState<number>(0);
-  const [studentDescriptors, setStudentDescriptors] = useState<StudentDescriptors[]>([]);
-  const [studentConfidenceScores, setStudentConfidenceScores] = useState<Map<string, number>>(new Map());
-  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  
-  // Recognition metrics state
-  const [recognitionMetrics, setRecognitionMetrics] = useState({
-    totalAttempts: 0,
-    successfulMatches: 0,
-    failedAttempts: 0,
-    avgConfidence: 0,
-    avgProcessingTime: 0,
-    confidenceHistory: [] as number[],
-  });
-  
   const { toast } = useToast();
+  
+  // ============ REFS (persisted across renders, don't trigger re-render) ============
+  const videoRef = useRef<HTMLVideoElement>(null); // Video element for camera feed
+  const detectionRafRef = useRef<number | null>(null); // RequestAnimationFrame ID for detection loop
+  const streamRef = useRef<MediaStream | null>(null); // Camera media stream
+  const markedStudents = useRef<Set<string>>(new Set()); // Students already marked present (prevents duplicates)
+  const lastProcessTime = useRef<number>(0); // Last frame process time (for FPS throttling)
+  const pendingMatches = useRef<Map<string, { count: number; sumConfidence: number; name: string }>>(new Map()); // Tracks consecutive matches for each student
+  const thresholdRef = useRef<number>(0.5); // Confidence threshold (0.0-1.0, lower = stricter)
+  
+  // ============ STATE (reactive, triggers re-render) ============
+  const [isStreaming, setIsStreaming] = useState(false); // Is camera active?
+  const [selectedClass, setSelectedClass] = useState<string>(""); // Selected class ID
+  const [classes, setClasses] = useState<any[]>([]); // All classes from database
+  const [students, setStudents] = useState<any[]>([]); // Students in selected class
+  const [loadingStudents, setLoadingStudents] = useState(false); // Loading indicator
+  const [faceCount, setFaceCount] = useState<number>(0); // Number of faces in current frame
+  const [profilesLoaded, setProfilesLoaded] = useState<number>(0); // Number of student profiles loaded
+  const [studentDescriptors, setStudentDescriptors] = useState<StudentDescriptors[]>([]); // All student face data
+  const [studentConfidenceScores, setStudentConfidenceScores] = useState<Map<string, number>>(new Map()); // Real-time confidence scores
+  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading'); // AI model loading status
+  
+  // Performance metrics for monitoring recognition accuracy
+  const [recognitionMetrics, setRecognitionMetrics] = useState({
+    totalAttempts: 0, // Total recognition attempts
+    successfulMatches: 0, // Successful identifications
+    failedAttempts: 0, // Failed recognitions
+    avgConfidence: 0, // Average match confidence
+    avgProcessingTime: 0, // Average processing time per frame (ms)
+    confidenceHistory: [] as number[], // Historical confidence data
+  });
 
   // Update threshold ref whenever settings change
   useEffect(() => {
