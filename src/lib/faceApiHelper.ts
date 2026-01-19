@@ -126,90 +126,234 @@ export function euclideanDistance(desc1: Float32Array | number[], desc2: Float32
 }
 
 /**
- * Find best matching student from a detected face descriptor
+ * ====================================================================
+ * ENHANCED MATCHING ALGORITHM
+ * ====================================================================
  * 
- * This is the core matching algorithm used during attendance.
- * Compares a detected face against all enrolled students' face descriptors.
+ * Uses a multi-stage matching pipeline with ensemble scoring:
+ * 1. Compute centroid (average) for each student's descriptors
+ * 2. Calculate both Euclidean distance AND cosine similarity
+ * 3. Combine metrics with weighted ensemble scoring
+ * 4. Apply strict ratio test (best must be 25%+ better than second-best)
+ * 5. Require minimum separation between candidates
+ * 6. Cross-validate against individual descriptors
+ * 7. Convert to calibrated confidence percentage
  * 
- * Algorithm:
- * 1. Compare detected face to ALL photos of each student
- * 2. Keep the best (lowest distance) match per student
- * 3. Apply threshold filter (reject if too different)
- * 4. Use "ratio test" - best match must be significantly better than 2nd best
- * 5. Convert distance to confidence percentage
- * 
- * @param faceDescriptor - Descriptor from detected face in camera
- * @param studentDescriptors - Array of all students with their enrolled face descriptors
- * @param threshold - Maximum distance to accept as a match (default 0.5)
- * @returns Best matching student with confidence, or null if no good match
+ * @param faceDescriptor - 128-dimensional descriptor from detected face
+ * @param studentDescriptors - All enrolled students with their face descriptors
+ * @param threshold - Maximum Euclidean distance to accept (default 0.5)
+ * @returns Best match with confidence score, or null if no reliable match
  */
 export function findBestMatchFromDescriptor(
   faceDescriptor: Float32Array,
   studentDescriptors: Array<{ studentId: string; studentName: string; descriptors: Float32Array[] }>,
   threshold: number = 0.5
 ): { studentId: string; studentName: string; confidence: number } | null {
-  // Store best match for each student
-  const candidates: Array<{ studentId: string; studentName: string; distance: number; avgDistance: number } > = [];
+  if (studentDescriptors.length === 0) return null;
+
+  // Configuration for matching
+  const RATIO_THRESHOLD = 0.75;     // Best must be < 75% of second-best
+  const MIN_SEPARATION = 0.12;      // Minimum gap between best and second-best
+  const COSINE_THRESHOLD = 0.65;    // Minimum cosine similarity
+  const EUCLIDEAN_WEIGHT = 0.55;    // Weight for Euclidean metric
+  const COSINE_WEIGHT = 0.45;       // Weight for cosine metric
+
+  /**
+   * Compute centroid (mean) of multiple descriptors
+   * The centroid is more stable than any single descriptor
+   */
+  function computeCentroid(descriptors: Float32Array[]): Float32Array {
+    if (descriptors.length === 0) return new Float32Array(128);
+    if (descriptors.length === 1) return descriptors[0];
+    
+    const centroid = new Float32Array(128);
+    for (const desc of descriptors) {
+      for (let i = 0; i < 128; i++) {
+        centroid[i] += desc[i];
+      }
+    }
+    for (let i = 0; i < 128; i++) {
+      centroid[i] /= descriptors.length;
+    }
+    return centroid;
+  }
+
+  /**
+   * Cosine similarity between two descriptors
+   * Range: -1 (opposite) to 1 (identical)
+   */
+  function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    return denom > 0 ? dot / denom : 0;
+  }
+
+  /**
+   * Compute ensemble score combining both metrics
+   */
+  function computeEnsembleScore(euclidean: number, cosine: number): number {
+    // Normalize Euclidean: 0 distance = 1.0, threshold = 0.0
+    const euclideanNorm = Math.max(0, 1 - euclidean / threshold);
+    // Normalize Cosine: COSINE_THRESHOLD = 0.0, 1.0 = 1.0
+    const cosineNorm = Math.max(0, (cosine - COSINE_THRESHOLD) / (1 - COSINE_THRESHOLD));
+    // Weighted combination
+    return (euclideanNorm * EUCLIDEAN_WEIGHT) + (cosineNorm * COSINE_WEIGHT);
+  }
+
+  // ========== STAGE 1: Compute scores for all students ==========
+  
+  const candidates: Array<{
+    studentId: string;
+    studentName: string;
+    centroidDist: number;      // Euclidean distance to centroid
+    cosineSim: number;         // Cosine similarity to centroid
+    bestIndividual: number;    // Best match to any single descriptor
+    avgIndividual: number;     // Average match across descriptors
+    ensemble: number;          // Combined ensemble score
+    descriptorCount: number;   // How many descriptors (more = more reliable)
+  }> = [];
 
   for (const student of studentDescriptors) {
     if (!student.descriptors || student.descriptors.length === 0) continue;
-    
-    // Calculate both best and average distance for more robust matching
-    let bestDist = Infinity;
+
+    // Compute centroid for this student
+    const centroid = computeCentroid(student.descriptors);
+
+    // Distance to centroid
+    const centroidDist = euclideanDistance(faceDescriptor, centroid);
+    const cosineSim = cosineSimilarity(faceDescriptor, centroid);
+
+    // Find best and average individual matches
+    let bestIndividual = Infinity;
     let totalDist = 0;
-    for (const d of student.descriptors) {
-      const dist = euclideanDistance(faceDescriptor, d);
-      if (dist < bestDist) bestDist = dist;
+    for (const desc of student.descriptors) {
+      const dist = euclideanDistance(faceDescriptor, desc);
+      if (dist < bestIndividual) bestIndividual = dist;
       totalDist += dist;
     }
-    const avgDist = totalDist / student.descriptors.length;
-    
-    if (isFinite(bestDist)) {
-      candidates.push({ 
-        studentId: student.studentId, 
-        studentName: student.studentName, 
-        distance: bestDist,
-        avgDistance: avgDist
-      });
-    }
+    const avgIndividual = totalDist / student.descriptors.length;
+
+    // Compute ensemble score
+    const ensemble = computeEnsembleScore(centroidDist, cosineSim);
+
+    candidates.push({
+      studentId: student.studentId,
+      studentName: student.studentName,
+      centroidDist,
+      cosineSim,
+      bestIndividual,
+      avgIndividual,
+      ensemble,
+      descriptorCount: student.descriptors.length,
+    });
   }
 
   if (candidates.length === 0) return null;
 
-  candidates.sort((a, b) => a.distance - b.distance);
+  // Sort by ensemble score (higher = better match)
+  candidates.sort((a, b) => b.ensemble - a.ensemble);
+
   const best = candidates[0];
   const second = candidates[1];
 
-  // Stricter threshold check
-  if (best.distance >= threshold) return null;
+  // ========== STAGE 2: Apply strict filters ==========
 
-  // Enhanced ratio test: best should be significantly better than second best
-  if (second) {
-    const ratio = best.distance / second.distance;
-    // Require at least 15% improvement over second best
-    if (ratio > 0.85) return null;
-    
-    // Additional check: average distance should also be good
-    if (best.avgDistance >= threshold * 1.2) return null;
-  }
-
-  // Require minimum separation from other candidates
-  const thirdBest = candidates[2];
-  if (thirdBest && best.distance / thirdBest.distance > 0.7) {
+  // Filter 1: Basic threshold check
+  if (best.centroidDist >= threshold) {
+    console.log(`[Match] REJECTED: Distance ${best.centroidDist.toFixed(3)} >= ${threshold}`);
     return null;
   }
 
-  // Map distance to confidence with stricter scaling
-  const clamped = Math.min(Math.max(best.distance, 0), threshold);
-  const confidence = Math.max(0, (1 - clamped / threshold) * 100);
+  // Filter 2: Cosine similarity check
+  if (best.cosineSim < COSINE_THRESHOLD) {
+    console.log(`[Match] REJECTED: Cosine ${best.cosineSim.toFixed(3)} < ${COSINE_THRESHOLD}`);
+    return null;
+  }
+
+  // Filter 3: Ratio test (if we have multiple candidates)
+  if (second) {
+    // Best distance should be significantly lower than second-best
+    if (best.centroidDist > 0.01) {
+      const ratio = best.centroidDist / second.centroidDist;
+      if (ratio > RATIO_THRESHOLD) {
+        console.log(`[Match] REJECTED: Ratio ${ratio.toFixed(3)} > ${RATIO_THRESHOLD} (ambiguous)`);
+        return null;
+      }
+    }
+
+    // Require minimum separation
+    const separation = second.centroidDist - best.centroidDist;
+    if (separation < MIN_SEPARATION) {
+      console.log(`[Match] REJECTED: Separation ${separation.toFixed(3)} < ${MIN_SEPARATION} (too close)`);
+      return null;
+    }
+
+    // Third-best check for extra certainty
+    if (candidates.length > 2) {
+      const third = candidates[2];
+      const thirdSeparation = third.centroidDist - best.centroidDist;
+      if (thirdSeparation < MIN_SEPARATION * 0.8) {
+        console.log(`[Match] REJECTED: Multiple close candidates (uncertainty)`);
+        return null;
+      }
+    }
+  }
+
+  // Filter 4: Cross-validate with individual descriptors
+  if (best.bestIndividual > threshold * 1.05) {
+    console.log(`[Match] REJECTED: Best individual ${best.bestIndividual.toFixed(3)} > ${(threshold * 1.05).toFixed(3)}`);
+    return null;
+  }
+
+  // Filter 5: Average consistency check
+  if (best.avgIndividual > threshold * 1.3) {
+    console.log(`[Match] REJECTED: Avg individual ${best.avgIndividual.toFixed(3)} > ${(threshold * 1.3).toFixed(3)}`);
+    return null;
+  }
+
+  // ========== STAGE 3: Compute calibrated confidence ==========
   
-  // Penalize confidence if average distance is not good
-  const avgConfidence = Math.max(0, (1 - best.avgDistance / (threshold * 1.5)) * 100);
-  const finalConfidence = (confidence * 0.7) + (avgConfidence * 0.3);
+  // Base confidence from ensemble score (0-100)
+  let confidence = best.ensemble * 100;
+
+  // Boost: Both metrics strongly agree
+  if (best.centroidDist < threshold * 0.4 && best.cosineSim > 0.85) {
+    confidence = Math.min(100, confidence * 1.2);
+  }
+
+  // Boost: Student has many descriptors (more reliable data)
+  if (best.descriptorCount >= 10) {
+    confidence = Math.min(100, confidence * 1.05);
+  }
+
+  // Penalty: Ratio is close to threshold (near-ambiguous)
+  if (second) {
+    const ratio = best.centroidDist / second.centroidDist;
+    if (ratio > RATIO_THRESHOLD * 0.85) {
+      confidence *= 0.9;
+    }
+  }
+
+  // Penalty: Average is noticeably higher than best (inconsistent match)
+  if (best.avgIndividual > best.bestIndividual * 1.4) {
+    confidence *= 0.95;
+  }
+
+  // Clamp to valid range
+  confidence = Math.max(0, Math.min(100, confidence));
+
+  console.log(`[Match] ACCEPTED: ${best.studentName} | ` +
+    `Dist=${best.centroidDist.toFixed(3)} Cos=${best.cosineSim.toFixed(3)} ` +
+    `Ensemble=${best.ensemble.toFixed(3)} Confidence=${confidence.toFixed(0)}%`);
 
   return {
     studentId: best.studentId,
     studentName: best.studentName,
-    confidence: Math.round(finalConfidence),
+    confidence: Math.round(confidence),
   };
 }
