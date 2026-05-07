@@ -80,6 +80,8 @@ const TakeAttendance = () => {
   const [studentDescriptors, setStudentDescriptors] = useState<StudentDescriptors[]>([]); // All student face data
   const [studentConfidenceScores, setStudentConfidenceScores] = useState<Map<string, number>>(new Map()); // Real-time confidence scores
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading'); // AI model loading status
+  const [sessionActive, setSessionActive] = useState(false); // Is an attendance session currently running?
+  const [sessionStartedAt, setSessionStartedAt] = useState<Date | null>(null); // When the current session began
   
   // Performance metrics for monitoring recognition accuracy
   const [recognitionMetrics, setRecognitionMetrics] = useState({
