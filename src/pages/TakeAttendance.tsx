@@ -82,6 +82,8 @@ const TakeAttendance = () => {
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading'); // AI model loading status
   const [sessionActive, setSessionActive] = useState(false); // Is an attendance session currently running?
   const [sessionStartedAt, setSessionStartedAt] = useState<Date | null>(null); // When the current session began
+  const [sessionName, setSessionName] = useState<string>(""); // Name for this session (e.g. "Morning")
+  const sessionNameRef = useRef<string>(""); // Stable copy used inside detection loop
   
   // Performance metrics for monitoring recognition accuracy
   const [recognitionMetrics, setRecognitionMetrics] = useState({
