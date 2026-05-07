@@ -21,9 +21,19 @@ const Auth = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const parsed = authLoginSchema.safeParse(loginForm);
+    if (!parsed.success) {
+      toast({
+        title: "Invalid input",
+        description: parsed.error.issues[0]?.message ?? "Please check your input",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsLoading(true);
 
-    const { error } = await signIn(loginForm.email, loginForm.password);
+    const { error } = await signIn(parsed.data.email, parsed.data.password);
 
     if (error) {
       toast({
