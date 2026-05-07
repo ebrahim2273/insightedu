@@ -70,6 +70,17 @@ const ClassManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const parsed = classSchema.safeParse(formData);
+    if (!parsed.success) {
+      toast({
+        title: "Invalid input",
+        description: parsed.error.issues[0]?.message ?? "Please check your input",
+        variant: "destructive",
+      });
+      return;
+    }
+    const cleanData = parsed.data;
+
     if (editingClass) {
       const { error } = await supabase
         .from('classes')
