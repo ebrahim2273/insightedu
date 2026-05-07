@@ -103,7 +103,7 @@ const ClassManagement = () => {
     } else {
       const { error } = await supabase
         .from('classes')
-        .insert([formData]);
+        .insert([cleanData]);
 
       if (error) {
         toast({ 
