@@ -151,12 +151,21 @@ export function findBestMatchFromDescriptor(
 ): { studentId: string; studentName: string; confidence: number } | null {
   if (studentDescriptors.length === 0) return null;
 
-  // Configuration for matching
-  const RATIO_THRESHOLD = 0.75;     // Best must be < 75% of second-best
-  const MIN_SEPARATION = 0.12;      // Minimum gap between best and second-best
-  const COSINE_THRESHOLD = 0.65;    // Minimum cosine similarity
+  // Balanced + adaptive configuration. With only one enrolled student,
+  // ratio/separation tests are skipped; with many students they tighten automatically.
+  const RATIO_THRESHOLD = 0.82;     // Best must be < 82% of second-best (relaxed slightly)
+  const MIN_SEPARATION = 0.08;      // Minimum gap between best and second-best
+  const COSINE_THRESHOLD = 0.55;    // Minimum cosine similarity (relaxed for varied lighting)
   const EUCLIDEAN_WEIGHT = 0.55;    // Weight for Euclidean metric
   const COSINE_WEIGHT = 0.45;       // Weight for cosine metric
+
+  // Helper: median of an array (more robust than mean against outlier shots)
+  const median = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
 
   /**
    * Compute centroid (mean) of multiple descriptors
