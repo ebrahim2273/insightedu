@@ -836,11 +836,11 @@ const TakeAttendance = () => {
               </Select>
             </div>
 
-            {/* Camera Controls */}
-            <div className="flex gap-2">
+            {/* Session Controls */}
+            <div className="flex flex-wrap gap-2 items-center">
               <Button
-                onClick={startCamera}
-                disabled={!selectedClass || isStreaming || loadingStudents || modelStatus !== 'ready'}
+                onClick={handleStartSession}
+                disabled={!selectedClass || sessionActive || loadingStudents || modelStatus !== 'ready'}
                 className="flex items-center gap-2"
               >
                 {loadingStudents ? (
@@ -851,19 +851,24 @@ const TakeAttendance = () => {
                 ) : (
                   <>
                     <Camera className="h-4 w-4" />
-                    Start Camera
+                    {sessionActive ? 'Session Running' : 'Start Session'}
                   </>
                 )}
               </Button>
               <Button
-                onClick={stopCamera}
-                disabled={!isStreaming}
+                onClick={handleEndSession}
+                disabled={!sessionActive}
                 variant="destructive"
                 className="flex items-center gap-2"
               >
-                <Square className="h-4 w-4" />
-                Stop Camera
+                <LogOut className="h-4 w-4" />
+                End Session
               </Button>
+              {sessionActive && sessionStartedAt && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  Started {sessionStartedAt.toLocaleTimeString()}
+                </span>
+              )}
             </div>
 
             {/* Camera Feed */}
