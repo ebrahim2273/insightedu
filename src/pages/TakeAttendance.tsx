@@ -365,11 +365,9 @@ const TakeAttendance = () => {
       setLoadingStudents(true);
       import.meta.env.DEV && console.log(`Fetching students for class: ${selectedClass}`);
       
-      // Get today's date range
-      const today = new Date();
-      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-      
+      // Each session starts with a clean slate; previous sessions live in DB.
+
+
       // Fetch students for selected class
       const { data: studentsData, error: studentsError} = await supabase
         .from('students')
