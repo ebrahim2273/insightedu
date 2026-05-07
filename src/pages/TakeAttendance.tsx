@@ -194,7 +194,8 @@ const TakeAttendance = () => {
           class_id: selectedClass,
           status: 'absent' as const,
           marked_at: new Date().toISOString(),
-          notes: 'Auto-marked at end of session',
+          session_name: sessionNameRef.current || sessionName || null,
+          notes: `Auto-marked at end of session "${sessionNameRef.current || sessionName || ''}"`,
         }));
 
         const { error: absentError } = await supabase
