@@ -288,9 +288,8 @@ export function findBestMatchFromDescriptor(
     return null;
   }
 
-  // Filter 3: Ratio test (if we have multiple candidates)
+  // Filter 3: Ratio test (only meaningful when we have a competitor)
   if (second) {
-    // Best distance should be significantly lower than second-best
     if (best.centroidDist > 0.01) {
       const ratio = best.centroidDist / second.centroidDist;
       if (ratio > RATIO_THRESHOLD) {
@@ -299,33 +298,24 @@ export function findBestMatchFromDescriptor(
       }
     }
 
-    // Require minimum separation
+    // Require minimum separation only when the best match isn't already very strong
     const separation = second.centroidDist - best.centroidDist;
-    if (separation < MIN_SEPARATION) {
+    const isStrongMatch = best.centroidDist < threshold * 0.6 && best.cosineSim > 0.75;
+    if (!isStrongMatch && separation < MIN_SEPARATION) {
       import.meta.env.DEV && console.log(`[Match] REJECTED: Separation ${separation.toFixed(3)} < ${MIN_SEPARATION} (too close)`);
       return null;
     }
-
-    // Third-best check for extra certainty
-    if (candidates.length > 2) {
-      const third = candidates[2];
-      const thirdSeparation = third.centroidDist - best.centroidDist;
-      if (thirdSeparation < MIN_SEPARATION * 0.8) {
-        import.meta.env.DEV && console.log(`[Match] REJECTED: Multiple close candidates (uncertainty)`);
-        return null;
-      }
-    }
   }
 
-  // Filter 4: Cross-validate with individual descriptors
-  if (best.bestIndividual > threshold * 1.05) {
-    import.meta.env.DEV && console.log(`[Match] REJECTED: Best individual ${best.bestIndividual.toFixed(3)} > ${(threshold * 1.05).toFixed(3)}`);
+  // Filter 4: Cross-validate with individual descriptors (slightly relaxed)
+  if (best.bestIndividual > threshold * 1.15) {
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Best individual ${best.bestIndividual.toFixed(3)} > ${(threshold * 1.15).toFixed(3)}`);
     return null;
   }
 
-  // Filter 5: Average consistency check
-  if (best.avgIndividual > threshold * 1.3) {
-    import.meta.env.DEV && console.log(`[Match] REJECTED: Avg individual ${best.avgIndividual.toFixed(3)} > ${(threshold * 1.3).toFixed(3)}`);
+  // Filter 5: Average consistency check (relaxed)
+  if (best.avgIndividual > threshold * 1.5) {
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Avg individual ${best.avgIndividual.toFixed(3)} > ${(threshold * 1.5).toFixed(3)}`);
     return null;
   }
 
