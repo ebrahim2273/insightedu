@@ -237,18 +237,22 @@ export function findBestMatchFromDescriptor(
     const centroidDist = euclideanDistance(faceDescriptor, centroid);
     const cosineSim = cosineSimilarity(faceDescriptor, centroid);
 
-    // Find best and average individual matches
+    // Find best, median, and average individual matches
+    const dists: number[] = [];
     let bestIndividual = Infinity;
     let totalDist = 0;
     for (const desc of student.descriptors) {
       const dist = euclideanDistance(faceDescriptor, desc);
       if (dist < bestIndividual) bestIndividual = dist;
       totalDist += dist;
+      dists.push(dist);
     }
     const avgIndividual = totalDist / student.descriptors.length;
+    const medianIndividual = median(dists);
 
-    // Compute ensemble score
-    const ensemble = computeEnsembleScore(centroidDist, cosineSim);
+    // Compute ensemble score (favor centroid but blend in median for robustness)
+    const blendedDist = (centroidDist * 0.6) + (medianIndividual * 0.4);
+    const ensemble = computeEnsembleScore(blendedDist, cosineSim);
 
     candidates.push({
       studentId: student.studentId,
