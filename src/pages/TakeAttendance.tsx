@@ -99,37 +99,131 @@ const TakeAttendance = () => {
     import.meta.env.DEV && console.log('Threshold updated to:', thresholdRef.current);
   }, [settings.confidenceThreshold]);
 
+  /**
+   * Start a new attendance session.
+   * - Wipes today's attendance for this class so absentees reset
+   * - Clears in-memory tracking (marked, pending, confidences)
+   * - Starts the camera and recognition loop
+   */
+  const handleStartSession = async () => {
+    if (!selectedClass) {
+      toast({
+        title: "No class selected",
+        description: "Please choose a class first",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (modelStatus !== 'ready') {
+      toast({
+        title: "Models not ready",
+        description: "Please wait for face recognition to initialize",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Reset today's attendance for this class so a fresh session starts clean
+      const today = new Date();
+      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+
+      const { error: deleteError } = await supabase
+        .from('attendance')
+        .delete()
+        .eq('class_id', selectedClass)
+        .gte('marked_at', startOfDay)
+        .lte('marked_at', endOfDay);
+
+      if (deleteError) throw deleteError;
+
+      // Reset in-memory tracking state
+      markedStudents.current.clear();
+      pendingMatches.current.clear();
+      setStudentConfidenceScores(new Map());
+      setStudents(prev => prev.map(s => ({ ...s, attendance: undefined })));
+      setRecognitionMetrics({
+        totalAttempts: 0,
+        successfulMatches: 0,
+        failedAttempts: 0,
+        avgConfidence: 0,
+        avgProcessingTime: 0,
+        confidenceHistory: [],
+      });
+
+      setSessionStartedAt(new Date());
+      setSessionActive(true);
+
+      await startCamera();
+
+      toast({
+        title: "Session started",
+        description: "Previous attendance reset. Recognition is now active.",
+      });
+    } catch (error) {
+      console.error('Error starting session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start session",
+        variant: "destructive",
+      });
+    }
+  };
+
+  /**
+   * End the active session.
+   * - Stops the camera
+   * - Persists every non-recognized student as 'absent' so analytics has a full picture
+   * - Navigates to analytics
+   */
   const handleEndSession = async () => {
     try {
-      if (!selectedClass) {
+      if (!sessionActive && !isStreaming) {
         toast({
-          title: "No session active",
-          description: "Please select a class first",
+          title: "No active session",
+          description: "Start a session first",
           variant: "destructive",
         });
         return;
       }
 
-      // Stop camera if running
       if (isStreaming) {
         stopCamera();
       }
 
-      // Get session summary
+      // Persist absentees: every student in the class not yet marked present
+      const absentStudents = students.filter(s => !markedStudents.current.has(s.id));
+      if (absentStudents.length > 0) {
+        const absentRows = absentStudents.map(s => ({
+          student_id: s.id,
+          class_id: selectedClass,
+          status: 'absent' as const,
+          marked_at: new Date().toISOString(),
+          notes: 'Auto-marked at end of session',
+        }));
+
+        const { error: absentError } = await supabase
+          .from('attendance')
+          .insert(absentRows);
+
+        if (absentError) {
+          console.error('Failed to save absentees:', absentError);
+        }
+      }
+
       const presentCount = markedStudents.current.size;
       const totalCount = students.length;
       const absentCount = totalCount - presentCount;
 
+      setSessionActive(false);
+
       toast({
-        title: "Session Ended",
-        description: `Attendance saved: ${presentCount} present, ${absentCount} absent`,
+        title: "Session ended",
+        description: `${presentCount} present, ${absentCount} absent — saved to analytics`,
       });
 
-      // Navigate to analytics after a brief delay
-      setTimeout(() => {
-        navigate('/analytics');
-      }, 1500);
-
+      setTimeout(() => navigate('/analytics'), 1200);
     } catch (error) {
       console.error('Error ending session:', error);
       toast({
