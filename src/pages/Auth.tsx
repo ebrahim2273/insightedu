@@ -54,7 +54,7 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (signupForm.password !== signupForm.confirmPassword) {
       toast({
         title: "Error",
@@ -64,9 +64,23 @@ const Auth = () => {
       return;
     }
 
+    const parsed = authSignupSchema.safeParse({
+      fullName: signupForm.fullName,
+      email: signupForm.email,
+      password: signupForm.password,
+    });
+    if (!parsed.success) {
+      toast({
+        title: "Invalid input",
+        description: parsed.error.issues[0]?.message ?? "Please check your input",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
-    const { error } = await signUp(signupForm.email, signupForm.password, signupForm.fullName);
+    const { error } = await signUp(parsed.data.email, parsed.data.password, parsed.data.fullName);
 
     if (error) {
       toast({
