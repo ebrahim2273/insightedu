@@ -103,8 +103,9 @@ const TakeAttendance = () => {
 
   /**
    * Start a new attendance session.
-   * - Wipes today's attendance for this class so absentees reset
-   * - Clears in-memory tracking (marked, pending, confidences)
+   * - Each session is named (e.g. "Morning", "Lab 1") so multiple sessions per day
+   *   can coexist in analytics without overwriting each other.
+   * - Clears in-memory tracking (marked, pending, confidences) for this session
    * - Starts the camera and recognition loop
    */
   const handleStartSession = async () => {
@@ -125,22 +126,13 @@ const TakeAttendance = () => {
       return;
     }
 
+    // Auto-generate a session name if the teacher didn't pick one
+    const finalName = (sessionName || '').trim() || `Session ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    sessionNameRef.current = finalName;
+    setSessionName(finalName);
+
     try {
-      // Reset today's attendance for this class so a fresh session starts clean
-      const today = new Date();
-      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-
-      const { error: deleteError } = await supabase
-        .from('attendance')
-        .delete()
-        .eq('class_id', selectedClass)
-        .gte('marked_at', startOfDay)
-        .lte('marked_at', endOfDay);
-
-      if (deleteError) throw deleteError;
-
-      // Reset in-memory tracking state
+      // Reset only the in-memory tracking state — previous sessions stay in DB.
       markedStudents.current.clear();
       pendingMatches.current.clear();
       setStudentConfidenceScores(new Map());
@@ -160,8 +152,8 @@ const TakeAttendance = () => {
       await startCamera();
 
       toast({
-        title: "Session started",
-        description: "Previous attendance reset. Recognition is now active.",
+        title: `Session "${finalName}" started`,
+        description: "Recognition is now active. Previous sessions are preserved.",
       });
     } catch (error) {
       console.error('Error starting session:', error);
