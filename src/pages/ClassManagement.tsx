@@ -103,7 +103,7 @@ const ClassManagement = () => {
     } else {
       const { error } = await supabase
         .from('classes')
-        .insert([{ ...cleanData, name: cleanData.name }]);
+        .insert([cleanData as { name: string } & typeof cleanData]);
 
       if (error) {
         toast({ 
