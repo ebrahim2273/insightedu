@@ -24,6 +24,7 @@ const Analytics = () => {
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [classPerformance, setClassPerformance] = useState<any[]>([]);
   const [dailyPattern, setDailyPattern] = useState<any[]>([]);
+  const [sessionsBreakdown, setSessionsBreakdown] = useState<Array<{ name: string; present: number; absent: number; rate: number }>>([]);
 
   useEffect(() => {
     fetchClasses();
