@@ -380,27 +380,7 @@ const TakeAttendance = () => {
       
       import.meta.env.DEV && console.log(`Found ${studentsData?.length || 0} students`);
       
-      // Fetch today's attendance for these students
       const studentIds = studentsData?.map(s => s.id) || [];
-      let attendanceMap: Record<string, boolean> = {};
-      
-      if (studentIds.length > 0) {
-        const { data: attendanceData } = await supabase
-          .from('attendance')
-          .select('student_id, status')
-          .eq('class_id', selectedClass)
-          .in('student_id', studentIds)
-          .gte('marked_at', startOfDay)
-          .lte('marked_at', endOfDay);
-        
-        // Build map of students already marked present today
-        attendanceData?.forEach(att => {
-          if (att.status === 'present') {
-            attendanceMap[att.student_id] = true;
-            markedStudents.current.add(att.student_id);
-          }
-        });
-      }
       
       setStudents(studentsData || []);
       
