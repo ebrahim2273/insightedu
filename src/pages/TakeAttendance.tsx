@@ -833,6 +833,21 @@ const TakeAttendance = () => {
               </Select>
             </div>
 
+            {/* Session Name */}
+            <div>
+              <Label className="text-sm font-medium">Session name</Label>
+              <Input
+                placeholder='e.g. "Morning", "Lab 1", "Period 3"'
+                value={sessionName}
+                onChange={(e) => setSessionName(e.target.value)}
+                disabled={sessionActive}
+                maxLength={60}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Each session is saved separately — previous sessions today are preserved.
+              </p>
+            </div>
+
             {/* Session Controls */}
             <div className="flex flex-wrap gap-2 items-center">
               <Button
@@ -862,9 +877,14 @@ const TakeAttendance = () => {
                 End Session
               </Button>
               {sessionActive && sessionStartedAt && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  Started {sessionStartedAt.toLocaleTimeString()}
-                </span>
+                <div className="flex items-center gap-2 ml-2">
+                  <Badge variant="outline" className="border-primary/40 text-primary">
+                    {sessionNameRef.current || sessionName}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Started {sessionStartedAt.toLocaleTimeString()}
+                  </span>
+                </div>
               )}
             </div>
 
