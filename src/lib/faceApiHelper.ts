@@ -40,7 +40,7 @@ export async function loadFaceApiModels() {
     await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
     
     modelsLoaded = true;
-    console.log('✓ face-api.js models loaded');
+    import.meta.env.DEV && console.log('✓ face-api.js models loaded');
   } catch (error) {
     console.error('Failed to load face-api.js models:', error);
     throw error;
@@ -70,7 +70,7 @@ export async function detectFacesWithDescriptors(video: HTMLVideoElement) {
     .withFaceLandmarks() // Find facial features
     .withFaceDescriptors(); // Generate 128-d descriptor
   
-  console.log('Face-api detections:', detections.length);
+  import.meta.env.DEV && console.log('Face-api detections:', detections.length);
   return detections;
 }
 
@@ -265,13 +265,13 @@ export function findBestMatchFromDescriptor(
 
   // Filter 1: Basic threshold check
   if (best.centroidDist >= threshold) {
-    console.log(`[Match] REJECTED: Distance ${best.centroidDist.toFixed(3)} >= ${threshold}`);
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Distance ${best.centroidDist.toFixed(3)} >= ${threshold}`);
     return null;
   }
 
   // Filter 2: Cosine similarity check
   if (best.cosineSim < COSINE_THRESHOLD) {
-    console.log(`[Match] REJECTED: Cosine ${best.cosineSim.toFixed(3)} < ${COSINE_THRESHOLD}`);
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Cosine ${best.cosineSim.toFixed(3)} < ${COSINE_THRESHOLD}`);
     return null;
   }
 
@@ -281,7 +281,7 @@ export function findBestMatchFromDescriptor(
     if (best.centroidDist > 0.01) {
       const ratio = best.centroidDist / second.centroidDist;
       if (ratio > RATIO_THRESHOLD) {
-        console.log(`[Match] REJECTED: Ratio ${ratio.toFixed(3)} > ${RATIO_THRESHOLD} (ambiguous)`);
+        import.meta.env.DEV && console.log(`[Match] REJECTED: Ratio ${ratio.toFixed(3)} > ${RATIO_THRESHOLD} (ambiguous)`);
         return null;
       }
     }
@@ -289,7 +289,7 @@ export function findBestMatchFromDescriptor(
     // Require minimum separation
     const separation = second.centroidDist - best.centroidDist;
     if (separation < MIN_SEPARATION) {
-      console.log(`[Match] REJECTED: Separation ${separation.toFixed(3)} < ${MIN_SEPARATION} (too close)`);
+      import.meta.env.DEV && console.log(`[Match] REJECTED: Separation ${separation.toFixed(3)} < ${MIN_SEPARATION} (too close)`);
       return null;
     }
 
@@ -298,7 +298,7 @@ export function findBestMatchFromDescriptor(
       const third = candidates[2];
       const thirdSeparation = third.centroidDist - best.centroidDist;
       if (thirdSeparation < MIN_SEPARATION * 0.8) {
-        console.log(`[Match] REJECTED: Multiple close candidates (uncertainty)`);
+        import.meta.env.DEV && console.log(`[Match] REJECTED: Multiple close candidates (uncertainty)`);
         return null;
       }
     }
@@ -306,13 +306,13 @@ export function findBestMatchFromDescriptor(
 
   // Filter 4: Cross-validate with individual descriptors
   if (best.bestIndividual > threshold * 1.05) {
-    console.log(`[Match] REJECTED: Best individual ${best.bestIndividual.toFixed(3)} > ${(threshold * 1.05).toFixed(3)}`);
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Best individual ${best.bestIndividual.toFixed(3)} > ${(threshold * 1.05).toFixed(3)}`);
     return null;
   }
 
   // Filter 5: Average consistency check
   if (best.avgIndividual > threshold * 1.3) {
-    console.log(`[Match] REJECTED: Avg individual ${best.avgIndividual.toFixed(3)} > ${(threshold * 1.3).toFixed(3)}`);
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Avg individual ${best.avgIndividual.toFixed(3)} > ${(threshold * 1.3).toFixed(3)}`);
     return null;
   }
 
@@ -347,7 +347,7 @@ export function findBestMatchFromDescriptor(
   // Clamp to valid range
   confidence = Math.max(0, Math.min(100, confidence));
 
-  console.log(`[Match] ACCEPTED: ${best.studentName} | ` +
+  import.meta.env.DEV && console.log(`[Match] ACCEPTED: ${best.studentName} | ` +
     `Dist=${best.centroidDist.toFixed(3)} Cos=${best.cosineSim.toFixed(3)} ` +
     `Ensemble=${best.ensemble.toFixed(3)} Confidence=${confidence.toFixed(0)}%`);
 

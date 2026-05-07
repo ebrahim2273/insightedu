@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Radar } from "lucide-react";
+import { authLoginSchema, authSignupSchema } from "@/lib/validation";
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -20,9 +21,19 @@ const Auth = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const parsed = authLoginSchema.safeParse(loginForm);
+    if (!parsed.success) {
+      toast({
+        title: "Invalid input",
+        description: parsed.error.issues[0]?.message ?? "Please check your input",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsLoading(true);
 
-    const { error } = await signIn(loginForm.email, loginForm.password);
+    const { error } = await signIn(parsed.data.email, parsed.data.password);
 
     if (error) {
       toast({
@@ -43,7 +54,7 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (signupForm.password !== signupForm.confirmPassword) {
       toast({
         title: "Error",
@@ -53,9 +64,23 @@ const Auth = () => {
       return;
     }
 
+    const parsed = authSignupSchema.safeParse({
+      fullName: signupForm.fullName,
+      email: signupForm.email,
+      password: signupForm.password,
+    });
+    if (!parsed.success) {
+      toast({
+        title: "Invalid input",
+        description: parsed.error.issues[0]?.message ?? "Please check your input",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
-    const { error } = await signUp(signupForm.email, signupForm.password, signupForm.fullName);
+    const { error } = await signUp(parsed.data.email, parsed.data.password, parsed.data.fullName);
 
     if (error) {
       toast({

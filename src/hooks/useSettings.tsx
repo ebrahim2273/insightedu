@@ -71,8 +71,8 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         const { error: insertError } = await supabase
           .from('user_settings')
           .insert({
-            user_id: user?.id,
-            ...defaultSettings,
+            user_id: user?.id!,
+            notifications: defaultSettings.notifications,
             email_alerts: defaultSettings.emailAlerts,
             auto_mark_attendance: defaultSettings.autoMarkAttendance,
             confidence_threshold: defaultSettings.confidenceThreshold,

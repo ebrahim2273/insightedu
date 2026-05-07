@@ -94,7 +94,7 @@ const TakeAttendance = () => {
   // Update threshold ref whenever settings change
   useEffect(() => {
     thresholdRef.current = settings.confidenceThreshold || 0.5;
-    console.log('Threshold updated to:', thresholdRef.current);
+    import.meta.env.DEV && console.log('Threshold updated to:', thresholdRef.current);
   }, [settings.confidenceThreshold]);
 
   const handleEndSession = async () => {
@@ -271,7 +271,7 @@ const TakeAttendance = () => {
     
     try {
       setLoadingStudents(true);
-      console.log(`Fetching students for class: ${selectedClass}`);
+      import.meta.env.DEV && console.log(`Fetching students for class: ${selectedClass}`);
       
       // Get today's date range
       const today = new Date();
@@ -286,7 +286,7 @@ const TakeAttendance = () => {
       
       if (studentsError) throw studentsError;
       
-      console.log(`Found ${studentsData?.length || 0} students`);
+      import.meta.env.DEV && console.log(`Found ${studentsData?.length || 0} students`);
       
       // Fetch today's attendance for these students
       const studentIds = studentsData?.map(s => s.id) || [];
@@ -325,7 +325,7 @@ const TakeAttendance = () => {
       
       if (embeddingsError) throw embeddingsError;
       
-      console.log(`Loaded ${embeddingsData?.length || 0} face embeddings`);
+      import.meta.env.DEV && console.log(`Loaded ${embeddingsData?.length || 0} face embeddings`);
       
       // Group descriptors by student
       const descriptorsByStudent = (embeddingsData || []).reduce((acc, emb) => {
@@ -450,7 +450,7 @@ const TakeAttendance = () => {
 
         // Detect faces with descriptors
         const detections = await detectFacesWithDescriptors(video);
-        console.log('Detections found:', detections.length);
+        import.meta.env.DEV && console.log('Detections found:', detections.length);
         setFaceCount(detections.length);
         
         // Clear pending matches for students not currently detected
@@ -458,15 +458,15 @@ const TakeAttendance = () => {
         
         // Process each detected face
         for (const detection of detections) {
-          console.log('Processing detection, has descriptor:', !!detection.descriptor);
+          import.meta.env.DEV && console.log('Processing detection, has descriptor:', !!detection.descriptor);
           if (detection.descriptor && studentDescriptors.length > 0) {
-            console.log('Student descriptors count:', studentDescriptors.length, 'Threshold:', thresholdRef.current);
+            import.meta.env.DEV && console.log('Student descriptors count:', studentDescriptors.length, 'Threshold:', thresholdRef.current);
             const match = findBestMatchFromDescriptor(
               detection.descriptor,
               studentDescriptors,
               thresholdRef.current // Use ref to get current threshold value
             );
-            console.log('Match result:', match);
+            import.meta.env.DEV && console.log('Match result:', match);
             
             // Track metrics
             setRecognitionMetrics(prev => {
@@ -508,11 +508,11 @@ const TakeAttendance = () => {
                 return m;
               });
               
-              console.log(`Pending match: ${match.studentName} - ${pending.count}/${REQUIRED_CONSECUTIVE_MATCHES} (${avgConfidence.toFixed(1)}%)`);
+              import.meta.env.DEV && console.log(`Pending match: ${match.studentName} - ${pending.count}/${REQUIRED_CONSECUTIVE_MATCHES} (${avgConfidence.toFixed(1)}%)`);
               
               // If we have enough consecutive matches and strong average confidence, mark attendance
               if (pending.count >= REQUIRED_CONSECUTIVE_MATCHES && avgConfidence >= MIN_CONFIDENCE_PERCENTAGE) {
-                console.log(`✓ Confirmed match: ${match.studentName} (${avgConfidence.toFixed(1)}%)`);
+                import.meta.env.DEV && console.log(`✓ Confirmed match: ${match.studentName} (${avgConfidence.toFixed(1)}%)`);
                 await markAttendance(match.studentId, match.studentName, avgConfidence);
                 pendingMatches.current.delete(match.studentId);
               }

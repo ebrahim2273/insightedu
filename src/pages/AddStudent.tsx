@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { loadFaceApiModels, generateFaceDescriptor } from "@/lib/faceApiHelper";
 import { useSettings } from "@/hooks/useSettings";
+import { studentSchema } from "@/lib/validation";
 
 const AddStudent = () => {
   const { settings } = useSettings();
@@ -282,8 +283,18 @@ const AddStudent = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const parsed = studentSchema.safeParse(formData);
+    if (!parsed.success) {
+      toast({
+        title: "Invalid input",
+        description: parsed.error.issues[0]?.message ?? "Please check your input",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const allImages = [...capturedImages, ...uploadedImages];
-    
+
     if (allImages.length < MIN_PHOTOS) {
       toast({
         title: "Error",
@@ -305,9 +316,9 @@ const AddStudent = () => {
       const { data: student, error: studentError } = await supabase
         .from('students')
         .insert([{
-          name: formData.name,
-          student_id: formData.studentId,
-          class_id: formData.classId || null,
+          name: parsed.data.name,
+          student_id: parsed.data.studentId || null,
+          class_id: parsed.data.classId || null,
         }])
         .select()
         .single();
