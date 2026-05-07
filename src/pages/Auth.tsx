@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Radar } from "lucide-react";
+import { authLoginSchema, authSignupSchema } from "@/lib/validation";
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
