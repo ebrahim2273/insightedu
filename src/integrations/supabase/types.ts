@@ -20,6 +20,7 @@ export type Database = {
           id: string
           marked_at: string | null
           notes: string | null
+          session_name: string | null
           status: Database["public"]["Enums"]["attendance_status"]
           student_id: string
         }
@@ -28,6 +29,7 @@ export type Database = {
           id?: string
           marked_at?: string | null
           notes?: string | null
+          session_name?: string | null
           status: Database["public"]["Enums"]["attendance_status"]
           student_id: string
         }
@@ -36,6 +38,7 @@ export type Database = {
           id?: string
           marked_at?: string | null
           notes?: string | null
+          session_name?: string | null
           status?: Database["public"]["Enums"]["attendance_status"]
           student_id?: string
         }
