@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Camera, Square, CheckCircle2, XCircle, Loader2, BarChart3, Download, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -82,6 +83,8 @@ const TakeAttendance = () => {
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading'); // AI model loading status
   const [sessionActive, setSessionActive] = useState(false); // Is an attendance session currently running?
   const [sessionStartedAt, setSessionStartedAt] = useState<Date | null>(null); // When the current session began
+  const [sessionName, setSessionName] = useState<string>(""); // Name for this session (e.g. "Morning")
+  const sessionNameRef = useRef<string>(""); // Stable copy used inside detection loop
   
   // Performance metrics for monitoring recognition accuracy
   const [recognitionMetrics, setRecognitionMetrics] = useState({
@@ -101,8 +104,9 @@ const TakeAttendance = () => {
 
   /**
    * Start a new attendance session.
-   * - Wipes today's attendance for this class so absentees reset
-   * - Clears in-memory tracking (marked, pending, confidences)
+   * - Each session is named (e.g. "Morning", "Lab 1") so multiple sessions per day
+   *   can coexist in analytics without overwriting each other.
+   * - Clears in-memory tracking (marked, pending, confidences) for this session
    * - Starts the camera and recognition loop
    */
   const handleStartSession = async () => {
@@ -123,22 +127,13 @@ const TakeAttendance = () => {
       return;
     }
 
+    // Auto-generate a session name if the teacher didn't pick one
+    const finalName = (sessionName || '').trim() || `Session ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    sessionNameRef.current = finalName;
+    setSessionName(finalName);
+
     try {
-      // Reset today's attendance for this class so a fresh session starts clean
-      const today = new Date();
-      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-
-      const { error: deleteError } = await supabase
-        .from('attendance')
-        .delete()
-        .eq('class_id', selectedClass)
-        .gte('marked_at', startOfDay)
-        .lte('marked_at', endOfDay);
-
-      if (deleteError) throw deleteError;
-
-      // Reset in-memory tracking state
+      // Reset only the in-memory tracking state — previous sessions stay in DB.
       markedStudents.current.clear();
       pendingMatches.current.clear();
       setStudentConfidenceScores(new Map());
@@ -158,8 +153,8 @@ const TakeAttendance = () => {
       await startCamera();
 
       toast({
-        title: "Session started",
-        description: "Previous attendance reset. Recognition is now active.",
+        title: `Session "${finalName}" started`,
+        description: "Recognition is now active. Previous sessions are preserved.",
       });
     } catch (error) {
       console.error('Error starting session:', error);
@@ -200,7 +195,8 @@ const TakeAttendance = () => {
           class_id: selectedClass,
           status: 'absent' as const,
           marked_at: new Date().toISOString(),
-          notes: 'Auto-marked at end of session',
+          session_name: sessionNameRef.current || sessionName || null,
+          notes: `Auto-marked at end of session "${sessionNameRef.current || sessionName || ''}"`,
         }));
 
         const { error: absentError } = await supabase
@@ -369,11 +365,9 @@ const TakeAttendance = () => {
       setLoadingStudents(true);
       import.meta.env.DEV && console.log(`Fetching students for class: ${selectedClass}`);
       
-      // Get today's date range
-      const today = new Date();
-      const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-      
+      // Each session starts with a clean slate; previous sessions live in DB.
+
+
       // Fetch students for selected class
       const { data: studentsData, error: studentsError} = await supabase
         .from('students')
@@ -384,27 +378,7 @@ const TakeAttendance = () => {
       
       import.meta.env.DEV && console.log(`Found ${studentsData?.length || 0} students`);
       
-      // Fetch today's attendance for these students
       const studentIds = studentsData?.map(s => s.id) || [];
-      let attendanceMap: Record<string, boolean> = {};
-      
-      if (studentIds.length > 0) {
-        const { data: attendanceData } = await supabase
-          .from('attendance')
-          .select('student_id, status')
-          .eq('class_id', selectedClass)
-          .in('student_id', studentIds)
-          .gte('marked_at', startOfDay)
-          .lte('marked_at', endOfDay);
-        
-        // Build map of students already marked present today
-        attendanceData?.forEach(att => {
-          if (att.status === 'present') {
-            attendanceMap[att.student_id] = true;
-            markedStudents.current.add(att.student_id);
-          }
-        });
-      }
       
       setStudents(studentsData || []);
       
@@ -654,6 +628,7 @@ const TakeAttendance = () => {
           class_id: selectedClass,
           status: 'present',
           marked_at: new Date().toISOString(),
+          session_name: sessionNameRef.current || sessionName || null,
         });
       
       if (error) throw error;
@@ -836,6 +811,21 @@ const TakeAttendance = () => {
               </Select>
             </div>
 
+            {/* Session Name */}
+            <div>
+              <Label className="text-sm font-medium">Session name</Label>
+              <Input
+                placeholder='e.g. "Morning", "Lab 1", "Period 3"'
+                value={sessionName}
+                onChange={(e) => setSessionName(e.target.value)}
+                disabled={sessionActive}
+                maxLength={60}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Each session is saved separately — previous sessions today are preserved.
+              </p>
+            </div>
+
             {/* Session Controls */}
             <div className="flex flex-wrap gap-2 items-center">
               <Button
@@ -865,9 +855,14 @@ const TakeAttendance = () => {
                 End Session
               </Button>
               {sessionActive && sessionStartedAt && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  Started {sessionStartedAt.toLocaleTimeString()}
-                </span>
+                <div className="flex items-center gap-2 ml-2">
+                  <Badge variant="outline" className="border-primary/40 text-primary">
+                    {sessionNameRef.current || sessionName}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Started {sessionStartedAt.toLocaleTimeString()}
+                  </span>
+                </div>
               )}
             </div>
 

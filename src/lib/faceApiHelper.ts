@@ -151,12 +151,21 @@ export function findBestMatchFromDescriptor(
 ): { studentId: string; studentName: string; confidence: number } | null {
   if (studentDescriptors.length === 0) return null;
 
-  // Configuration for matching
-  const RATIO_THRESHOLD = 0.75;     // Best must be < 75% of second-best
-  const MIN_SEPARATION = 0.12;      // Minimum gap between best and second-best
-  const COSINE_THRESHOLD = 0.65;    // Minimum cosine similarity
+  // Balanced + adaptive configuration. With only one enrolled student,
+  // ratio/separation tests are skipped; with many students they tighten automatically.
+  const RATIO_THRESHOLD = 0.82;     // Best must be < 82% of second-best (relaxed slightly)
+  const MIN_SEPARATION = 0.08;      // Minimum gap between best and second-best
+  const COSINE_THRESHOLD = 0.55;    // Minimum cosine similarity (relaxed for varied lighting)
   const EUCLIDEAN_WEIGHT = 0.55;    // Weight for Euclidean metric
   const COSINE_WEIGHT = 0.45;       // Weight for cosine metric
+
+  // Helper: median of an array (more robust than mean against outlier shots)
+  const median = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
 
   /**
    * Compute centroid (mean) of multiple descriptors
@@ -228,18 +237,22 @@ export function findBestMatchFromDescriptor(
     const centroidDist = euclideanDistance(faceDescriptor, centroid);
     const cosineSim = cosineSimilarity(faceDescriptor, centroid);
 
-    // Find best and average individual matches
+    // Find best, median, and average individual matches
+    const dists: number[] = [];
     let bestIndividual = Infinity;
     let totalDist = 0;
     for (const desc of student.descriptors) {
       const dist = euclideanDistance(faceDescriptor, desc);
       if (dist < bestIndividual) bestIndividual = dist;
       totalDist += dist;
+      dists.push(dist);
     }
     const avgIndividual = totalDist / student.descriptors.length;
+    const medianIndividual = median(dists);
 
-    // Compute ensemble score
-    const ensemble = computeEnsembleScore(centroidDist, cosineSim);
+    // Compute ensemble score (favor centroid but blend in median for robustness)
+    const blendedDist = (centroidDist * 0.6) + (medianIndividual * 0.4);
+    const ensemble = computeEnsembleScore(blendedDist, cosineSim);
 
     candidates.push({
       studentId: student.studentId,
@@ -275,9 +288,8 @@ export function findBestMatchFromDescriptor(
     return null;
   }
 
-  // Filter 3: Ratio test (if we have multiple candidates)
+  // Filter 3: Ratio test (only meaningful when we have a competitor)
   if (second) {
-    // Best distance should be significantly lower than second-best
     if (best.centroidDist > 0.01) {
       const ratio = best.centroidDist / second.centroidDist;
       if (ratio > RATIO_THRESHOLD) {
@@ -286,33 +298,24 @@ export function findBestMatchFromDescriptor(
       }
     }
 
-    // Require minimum separation
+    // Require minimum separation only when the best match isn't already very strong
     const separation = second.centroidDist - best.centroidDist;
-    if (separation < MIN_SEPARATION) {
+    const isStrongMatch = best.centroidDist < threshold * 0.6 && best.cosineSim > 0.75;
+    if (!isStrongMatch && separation < MIN_SEPARATION) {
       import.meta.env.DEV && console.log(`[Match] REJECTED: Separation ${separation.toFixed(3)} < ${MIN_SEPARATION} (too close)`);
       return null;
     }
-
-    // Third-best check for extra certainty
-    if (candidates.length > 2) {
-      const third = candidates[2];
-      const thirdSeparation = third.centroidDist - best.centroidDist;
-      if (thirdSeparation < MIN_SEPARATION * 0.8) {
-        import.meta.env.DEV && console.log(`[Match] REJECTED: Multiple close candidates (uncertainty)`);
-        return null;
-      }
-    }
   }
 
-  // Filter 4: Cross-validate with individual descriptors
-  if (best.bestIndividual > threshold * 1.05) {
-    import.meta.env.DEV && console.log(`[Match] REJECTED: Best individual ${best.bestIndividual.toFixed(3)} > ${(threshold * 1.05).toFixed(3)}`);
+  // Filter 4: Cross-validate with individual descriptors (slightly relaxed)
+  if (best.bestIndividual > threshold * 1.15) {
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Best individual ${best.bestIndividual.toFixed(3)} > ${(threshold * 1.15).toFixed(3)}`);
     return null;
   }
 
-  // Filter 5: Average consistency check
-  if (best.avgIndividual > threshold * 1.3) {
-    import.meta.env.DEV && console.log(`[Match] REJECTED: Avg individual ${best.avgIndividual.toFixed(3)} > ${(threshold * 1.3).toFixed(3)}`);
+  // Filter 5: Average consistency check (relaxed)
+  if (best.avgIndividual > threshold * 1.5) {
+    import.meta.env.DEV && console.log(`[Match] REJECTED: Avg individual ${best.avgIndividual.toFixed(3)} > ${(threshold * 1.5).toFixed(3)}`);
     return null;
   }
 
