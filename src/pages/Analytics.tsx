@@ -87,6 +87,49 @@ const Analytics = () => {
     await fetchClassPerformance();
     // Fetch daily pattern
     await fetchDailyPattern();
+    // Per-session breakdown for the selected date
+    await fetchSessionsBreakdown();
+  };
+
+  const fetchSessionsBreakdown = async () => {
+    let query = supabase
+      .from('attendance')
+      .select('status, session_name')
+      .gte('marked_at', `${date}T00:00:00`)
+      .lte('marked_at', `${date}T23:59:59`);
+
+    if (selectedClass !== 'all') {
+      query = query.eq('class_id', selectedClass);
+    }
+
+    const { data } = await query;
+    if (!data) {
+      setSessionsBreakdown([]);
+      return;
+    }
+
+    const groups = new Map<string, { present: number; absent: number }>();
+    for (const row of data) {
+      const key = (row.session_name || 'Unnamed').trim() || 'Unnamed';
+      const g = groups.get(key) || { present: 0, absent: 0 };
+      if (row.status === 'present') g.present += 1;
+      else if (row.status === 'absent') g.absent += 1;
+      groups.set(key, g);
+    }
+
+    const breakdown = Array.from(groups.entries())
+      .map(([name, g]) => {
+        const total = g.present + g.absent;
+        return {
+          name,
+          present: g.present,
+          absent: g.absent,
+          rate: total ? Math.round((g.present / total) * 100) : 0,
+        };
+      })
+      .sort((a, b) => b.present + b.absent - (a.present + a.absent));
+
+    setSessionsBreakdown(breakdown);
   };
 
   const fetchWeeklyData = async () => {
