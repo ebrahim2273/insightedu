@@ -649,6 +649,7 @@ const TakeAttendance = () => {
           class_id: selectedClass,
           status: 'present',
           marked_at: new Date().toISOString(),
+          session_name: sessionNameRef.current || sessionName || null,
         });
       
       if (error) throw error;
