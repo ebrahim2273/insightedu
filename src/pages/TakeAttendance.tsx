@@ -897,15 +897,6 @@ const TakeAttendance = () => {
               <CardTitle>Students ({students.length})</CardTitle>
               <div className="flex gap-2">
                 <Button
-                  onClick={handleEndSession}
-                  variant="default"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                  End Session
-                </Button>
-                <Button
                   onClick={handleExportCSV}
                   variant="outline"
                   size="sm"
