@@ -556,6 +556,36 @@ const Analytics = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Sessions Breakdown for the selected date */}
+        <Card className="border-border/50">
+          <CardHeader>
+            <CardTitle>
+              Sessions on {date}{selectedClass !== 'all' ? ` — ${classes.find(c => c.id === selectedClass)?.name ?? ''}` : ''}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sessionsBreakdown.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No sessions recorded for this date.</p>
+            ) : (
+              <div className="space-y-2">
+                {sessionsBreakdown.map((s) => (
+                  <div
+                    key={s.name}
+                    className="flex items-center justify-between p-3 rounded-md border border-border/50 hover:bg-muted/40 transition-colors"
+                  >
+                    <div className="font-medium text-foreground">{s.name}</div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-success">Present: <strong>{s.present}</strong></span>
+                      <span className="text-destructive">Absent: <strong>{s.absent}</strong></span>
+                      <span className="text-primary font-semibold">{s.rate}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );
