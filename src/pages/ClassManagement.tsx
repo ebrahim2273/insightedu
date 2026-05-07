@@ -214,18 +214,29 @@ const ClassManagement = () => {
     try {
       const csvData = await parseCSVFile(selectedFile);
       
-      // Expected CSV columns: name, student_id, email
-      const studentsToInsert = csvData.map(row => ({
-        name: row.name || row.Name,
-        student_id: row.student_id || row['Student ID'] || row.id,
-        email: row.email || row.Email,
-        class_id: viewingStudents.id,
-      })).filter(s => s.name); // Only include rows with names
+      // Expected CSV columns: name, student_id, email — validate each row
+      const studentsToInsert: Array<{ name: string; student_id?: string; email?: string; class_id: string }> = [];
+      for (const row of csvData) {
+        const candidate = {
+          name: (row.name || row.Name || "").toString(),
+          student_id: (row.student_id || row['Student ID'] || row.id || "").toString(),
+          email: (row.email || row.Email || "").toString(),
+        };
+        const result = csvStudentRowSchema.safeParse(candidate);
+        if (result.success) {
+          studentsToInsert.push({
+            name: result.data.name,
+            student_id: result.data.student_id || undefined,
+            email: result.data.email || undefined,
+            class_id: viewingStudents.id,
+          });
+        }
+      }
 
       if (studentsToInsert.length === 0) {
         toast({
           title: "No valid data",
-          description: "CSV file must contain 'name' column",
+          description: "CSV must contain a 'name' column and valid emails",
           variant: "destructive",
         });
         return;
