@@ -84,7 +84,7 @@ const ClassManagement = () => {
     if (editingClass) {
       const { error } = await supabase
         .from('classes')
-        .update(formData)
+        .update(cleanData)
         .eq('id', editingClass.id);
 
       if (error) {
