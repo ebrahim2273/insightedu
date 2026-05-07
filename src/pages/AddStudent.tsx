@@ -316,9 +316,9 @@ const AddStudent = () => {
       const { data: student, error: studentError } = await supabase
         .from('students')
         .insert([{
-          name: formData.name,
-          student_id: formData.studentId,
-          class_id: formData.classId || null,
+          name: parsed.data.name,
+          student_id: parsed.data.studentId || null,
+          class_id: parsed.data.classId || null,
         }])
         .select()
         .single();
