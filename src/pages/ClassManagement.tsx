@@ -12,6 +12,7 @@ import { Plus, Edit, Trash2, Users as UsersIcon, Eye, Upload } from "lucide-reac
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { parseCSVFile } from "@/utils/csvExport";
+import { classSchema, csvStudentRowSchema } from "@/lib/validation";
 
 const ClassManagement = () => {
   const [classes, setClasses] = useState<any[]>([]);
